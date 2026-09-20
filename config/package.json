@@ -1,0 +1,4 @@
+{
+  "//": "Not a package — a marker. server.js and the scripts/ files are CommonJS (node loads them directly, before any bundler), but platform.js is an ES module. Without this, node has to guess platform.js's type, reparse it, and print a MODULE_TYPELESS_PACKAGE_JSON warning on every start. Declaring the type for this one directory removes the guess, and means the company name can stay in exactly one file.",
+  "type": "module"
+}
