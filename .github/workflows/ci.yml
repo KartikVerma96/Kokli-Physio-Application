@@ -1,0 +1,129 @@
+# =============================================================================
+#  CI — every push and every pull request
+# =============================================================================
+#  Two jobs. `check` is fast and always runs. `test` stands up a real MySQL and
+#  a real server, because that is the only way this suite means anything: it
+#  signs in as four different roles over HTTP and asserts that one clinic cannot
+#  reach another's data. A mocked version of that would prove nothing.
+#
+#  WHY THE DEV SERVER AND NOT THE PRODUCTION BUILD
+#  -----------------------------------------------
+#  The suites invoke server actions directly, and they find each action's id in
+#  .next/dev/server/server-reference-manifest.json — a file only the dev server
+#  writes. `next build` does not produce it.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Lint and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx eslint .
+      # A build needs these to exist, but never uses their values here.
+      - run: npm run build
+        env:
+          PLATFORM_ENCRYPTION_KEY: ci-placeholder-key-not-used-for-anything
+          AUTH_SECRET: ci-placeholder-secret-not-used-for-anything
+
+  test:
+    name: Full suite
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:9
+        env:
+          MYSQL_ROOT_PASSWORD: ci
+          MYSQL_DATABASE: physio_clinic
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # ---------------------------------------------------------------------
+      #  *.localhost does NOT resolve on Linux
+      # ---------------------------------------------------------------------
+      #  macOS and browsers resolve any *.localhost to 127.0.0.1. Node on Ubuntu
+      #  does not, so every clinic subdomain the suites use has to be spelled out
+      #  or the tests fail with ENOTFOUND — which reads like a broken app rather
+      #  than a missing hosts entry.
+      - name: Point every test subdomain at localhost
+        run: |
+          sudo tee -a /etc/hosts >/dev/null <<'HOSTS'
+          127.0.0.1 aarogya.localhost isolationtest.localhost nope.localhost
+          127.0.0.1 acctest.localhost acctest2.localhost billtest.localhost
+          127.0.0.1 biztest.localhost cxltest.localhost journeytest.localhost
+          127.0.0.1 mailtest.localhost otptest.localhost realtest.localhost
+          127.0.0.1 revtest.localhost watest.localhost
+          HOSTS
+
+      - run: npm ci
+
+      # Every integration secret is left unset on purpose. WhatsApp, email and
+      # billing all fall back to printing to the terminal, which is what makes
+      # the suite runnable without a single third-party account.
+      - name: Write .env.local
+        run: |
+          cat > .env.local <<'ENV'
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_USER=root
+          DB_PASSWORD=ci
+          DB_NAME=physio_clinic
+          AUTH_SECRET=ci-secret-only-used-inside-this-job-abcdefghijklmnop
+          AUTH_URL=http://localhost:3000
+          PLATFORM_DOMAIN=localhost
+          PLATFORM_PROTOCOL=http
+          PLATFORM_ENCRYPTION_KEY=ci-encryption-key-only-used-inside-this-job=
+          CRON_SECRET=ci-cron-secret
+          PORT=3000
+          ENV
+
+      - name: Create the schema and seed
+        run: npm run db:setup
+
+      - name: Start the server
+        run: |
+          npm run dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:3000/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "server never came up:"; cat /tmp/dev.log; exit 1
+
+      # Warm every page so the dev server compiles each route and writes its
+      # server actions into the manifest the suites read.
+      - name: Warm the routes
+        run: |
+          for p in / /login /register /forgot-password /admin /admin/services \
+                   /admin/settings/branding /admin/settings/whatsapp /admin/billing \
+                   /dashboard/profile /platform /platform/errors; do
+            curl -s -o /dev/null -H 'Host: aarogya.localhost' "http://localhost:3000$p" || true
+          done
+
+      - run: npm test
+
+      # The log is the only way to see WHY a suite failed once the job has ended.
+      - name: Server log
+        if: failure()
+        run: tail -120 /tmp/dev.log

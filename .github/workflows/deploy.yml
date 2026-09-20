@@ -1,0 +1,72 @@
+# =============================================================================
+#  DEPLOY — main to the server, after CI has passed
+# =============================================================================
+#  Triggered by CI completing successfully on main, never by a push directly.
+#  That ordering is the point: a deploy that runs beside the tests rather than
+#  after them will happily ship a build the suite was about to reject.
+#
+#  It is also manually runnable from the Actions tab, for the day a deploy has
+#  to happen without a commit.
+#
+#  WHAT IT DOES NOT DO
+#  -------------------
+#  No migrations. `npm run db:migrate` is deliberately left for a human: a schema
+#  change on a database holding medical records should be run by somebody who is
+#  watching, with a backup taken minutes earlier. See DEPLOYMENT.md.
+# =============================================================================
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Ship to production
+    runs-on: ubuntu-latest
+    # Only when CI actually passed. A `workflow_run` fires on failure too.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # A deploy that hangs forever holds the runner and tells you nothing.
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd ~/kokli
+
+            # A backup BEFORE anything changes. It costs seconds and it is the
+            # difference between a bad deploy and a bad day.
+            npm run backup
+
+            git fetch --all
+            git reset --hard origin/main
+
+            # `npm ci` not `npm install`: it installs exactly the lockfile, so a
+            # deploy can never quietly pick up a different dependency version
+            # from the one the tests ran against.
+            npm ci --omit=dev --ignore-scripts
+            npm ci
+            npm run build
+
+            # `reload` not `restart`: pm2 starts the new process, waits for it to
+            # be listening, and only then stops the old one. A restart would drop
+            # every in-progress request and every live video call.
+            pm2 reload kokli --update-env
+            pm2 save
+
+            sleep 3
+            curl -sf http://localhost:3000/ >/dev/null \
+              || { echo "health check failed after deploy"; pm2 logs kokli --lines 40 --nostream; exit 1; }
+            echo "deployed $(git rev-parse --short HEAD)"
