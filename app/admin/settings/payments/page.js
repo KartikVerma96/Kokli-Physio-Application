@@ -153,7 +153,7 @@ export default async function PaymentSettingsPage() {
           ].map((step, index) => (
             <li key={index} className="flex gap-3">
               <span
-                className="grid size-6 shrink-0 place-items-center rounded-lg bg-brand-600 text-xs font-bold text-white"
+                className="grid size-6 shrink-0 place-items-center rounded-lg bg-brand-600 text-xs font-bold text-[var(--color-brand-fg,#fff)]"
                 aria-hidden="true"
               >
                 {index + 1}

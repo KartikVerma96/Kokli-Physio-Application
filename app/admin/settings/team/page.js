@@ -70,7 +70,7 @@ export default async function TeamPage() {
           {used >= limit ? (
             <Link
               href="/admin/billing"
-              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+              className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-[var(--color-brand-fg,#fff)] transition-colors hover:bg-brand-700"
             >
               Upgrade for more seats
             </Link>

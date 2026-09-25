@@ -106,13 +106,17 @@ export default async function ClinicHomePage() {
 
       <Hero site={site} nextSlot={nextSlot} servicesCount={services.length} />
       <TrustBar site={site} />
-      <Conditions site={site} />
       <ServicesGrid services={services} limit={6} />
       <HowItWorks site={site} />
       <DoctorIntro site={site} />
+      {/* After the physiotherapist, not before the treatments. By this point a
+          visitor has read what the clinic does and who does it, so the long list
+          of conditions answers "do they treat MY problem?" — the question they
+          actually have by then. */}
+      <Conditions site={site} />
       <Testimonials reviews={reviews} />
-      <Faq site={site} />
       <CtaBand site={site} />
+      <Faq site={site} />
     </>
   )
 }

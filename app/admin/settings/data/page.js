@@ -123,7 +123,7 @@ export default async function DataPage() {
               <a
                 href={`/api/export/clinic?dataset=${item.key}`}
                 download
-                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-ink-200 px-3.5 text-sm font-semibold transition-colors hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-ink-200 px-3.5 text-sm font-semibold transition-colors hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10"
               >
                 <Download className="size-4" aria-hidden="true" />
                 CSV
@@ -147,7 +147,7 @@ export default async function DataPage() {
             <a
               href="/api/export/clinic?dataset=all"
               download
-              className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl border border-ink-200 px-4 text-sm font-semibold transition-colors hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
+              className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl border border-ink-200 px-4 text-sm font-semibold transition-colors hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10"
             >
               <Download className="size-4" aria-hidden="true" />
               Download everything (JSON)

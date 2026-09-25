@@ -28,7 +28,9 @@ import { ChevronRight } from 'lucide-react'
 
 export default function PageHeader({ eyebrow, title, description, breadcrumb = [], children }) {
   return (
-    <section className="mesh-bg relative overflow-hidden border-b border-ink-200 pb-12 pt-10 dark:border-ink-800">
+    // The old pt-10 plus the height the floating header overlays: 76px on a
+    // phone, 84px from lg. See the note in Navbar.js.
+    <section className="mesh-bg relative overflow-hidden border-b border-ink-200 pb-12 pt-29 lg:pt-31 dark:border-ink-800">
       <div className="container-page">
         {/* -------------------------------------------------- breadcrumbs */}
         {breadcrumb.length > 0 && (

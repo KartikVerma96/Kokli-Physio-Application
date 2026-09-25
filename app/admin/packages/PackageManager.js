@@ -147,7 +147,7 @@ export default function PackageManager({ packages, services }) {
                     type="button"
                     onClick={() => open(pkg)}
                     aria-label={`Edit ${pkg.name}`}
-                    className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 dark:hover:text-ink-100 dark:hover:bg-ink-800"
+                    className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-200 dark:hover:bg-brand-500/10"
                   >
                     <Pencil className="size-4" />
                   </button>
@@ -157,7 +157,7 @@ export default function PackageManager({ packages, services }) {
                     disabled={toggling}
                     title={pkg.isActive ? 'Stop offering this' : 'Offer it again'}
                     aria-label={pkg.isActive ? `Stop offering ${pkg.name}` : `Offer ${pkg.name} again`}
-                    className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 dark:hover:text-ink-100 disabled:opacity-40 dark:hover:bg-ink-800"
+                    className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-200 disabled:opacity-40 dark:hover:bg-brand-500/10"
                   >
                     {pkg.isActive ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
                   </button>

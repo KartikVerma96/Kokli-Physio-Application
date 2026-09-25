@@ -141,7 +141,7 @@ export default function TeamManager({ physios, atLimit, limit }) {
                         ? 'Deactivate'
                         : 'Reactivate'
                   }
-                  className="grid size-9 shrink-0 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 dark:hover:text-ink-100 disabled:opacity-40 dark:hover:bg-ink-800"
+                  className="grid size-9 shrink-0 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-200 disabled:opacity-40 dark:hover:bg-brand-500/10"
                   aria-label={physio.isActive ? `Deactivate ${physio.name}` : `Reactivate ${physio.name}`}
                 >
                   <Power className="size-4" />

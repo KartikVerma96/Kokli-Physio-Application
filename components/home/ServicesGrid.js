@@ -73,7 +73,7 @@ export function ServiceCard({ service }) {
       className="card group flex h-full flex-col p-6 transition-all duration-300 hover:-translate-y-1.5 hover:border-brand-200 hover:shadow-lift dark:hover:border-brand-800"
     >
       <div className="flex items-start justify-between gap-3">
-        <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 transition-all duration-300 group-hover:scale-105 group-hover:bg-brand-600 group-hover:text-white dark:bg-brand-950/60 dark:text-brand-300">
+        <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 transition-all duration-300 group-hover:scale-105 group-hover:bg-brand-600 group-hover:text-[var(--color-brand-fg,#fff)] dark:bg-brand-950/60 dark:text-brand-300">
           <Icon name={service.icon} className="size-6" />
         </span>
 

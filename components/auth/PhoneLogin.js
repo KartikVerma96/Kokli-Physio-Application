@@ -252,7 +252,7 @@ export default function PhoneLogin({ callbackUrl = '/dashboard', onCancel }) {
                 setError(null)
                 setNotice(null)
               }}
-              className="inline-flex items-center gap-1 font-medium text-ink-500 hover:text-ink-800 dark:hover:text-ink-100"
+              className="inline-flex items-center gap-1 font-medium text-ink-500 hover:text-brand-700 dark:hover:text-brand-200"
             >
               <ArrowLeft className="size-3" aria-hidden="true" />
               Change number
@@ -274,7 +274,7 @@ export default function PhoneLogin({ callbackUrl = '/dashboard', onCancel }) {
         <button
           type="button"
           onClick={onCancel}
-          className="w-full text-center text-xs font-medium text-ink-500 hover:text-ink-800 dark:hover:text-ink-100"
+          className="w-full text-center text-xs font-medium text-ink-500 hover:text-brand-700 dark:hover:text-brand-200"
         >
           Use email and password instead
         </button>

@@ -181,7 +181,8 @@ export default function SignupForm({ plans, selectedPlan, platformDomain }) {
   }
 
   return (
-    <div className="container-page py-14">
+    // pt = the old py-14 plus the height the floating header overlays.
+    <div className="container-page pt-33 pb-14 lg:pt-35">
       <div className="mx-auto max-w-2xl">
         <div className="text-center">
           <h1 className="text-3xl font-bold sm:text-4xl">Create your clinic</h1>
@@ -462,7 +463,7 @@ function ClinicReady({ done, clinicName, email }) {
   const target = `${done.clinicUrl}/admin/onboarding`
 
   return (
-    <div className="container-page py-20">
+    <div className="container-page pt-39 pb-20 lg:pt-41">
       <div className="mx-auto max-w-xl text-center">
         <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
           <Check className="size-7" aria-hidden="true" />
@@ -478,7 +479,7 @@ function ClinicReady({ done, clinicName, email }) {
         <div className="mt-8">
           <a
             href={target}
-            className="inline-flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-brand-600 px-7 text-base font-semibold text-white shadow-brand transition-all hover:-translate-y-0.5 hover:bg-brand-700"
+            className="inline-flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-brand-600 px-7 text-base font-semibold text-[var(--color-brand-fg,#fff)] shadow-brand transition-all hover:-translate-y-0.5 hover:bg-brand-700"
           >
             Set up your clinic
             <ArrowRight className="size-4" aria-hidden="true" />

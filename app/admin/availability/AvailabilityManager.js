@@ -271,7 +271,7 @@ export default function AvailabilityManager({
                                   runAction(toggleAvailabilityRule, [rule.id, !rule.is_active])
                                 }
                                 disabled={pending}
-                                className="grid size-8 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-700"
+                                className="grid size-8 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/15"
                                 aria-label={rule.is_active ? 'Switch these hours off' : 'Switch these hours on'}
                                 title={rule.is_active ? 'Switch off temporarily' : 'Switch back on'}
                               >

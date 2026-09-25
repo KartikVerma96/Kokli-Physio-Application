@@ -100,7 +100,7 @@ export default function CancelAppointment({ site, appointmentId, refundable, amo
             <button
               type="button"
               onClick={() => !busy && setOpen(false)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 dark:hover:text-ink-100 dark:hover:bg-ink-800"
+              className="absolute right-4 top-4 rounded-lg p-1 text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-200 dark:hover:bg-brand-500/10"
               aria-label="Close"
             >
               <X className="size-4" />

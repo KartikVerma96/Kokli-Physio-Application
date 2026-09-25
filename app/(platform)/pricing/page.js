@@ -100,7 +100,8 @@ export default async function PricingPage() {
 
   return (
     <>
-      <section className="mesh-bg border-b border-ink-200 py-16 dark:border-ink-800">
+      {/* pt = the old py-16 plus the height the floating header overlays. */}
+      <section className="mesh-bg border-b border-ink-200 pt-35 pb-16 lg:pt-37 dark:border-ink-800">
         <div className="container-page">
           <SectionHeading
             eyebrow="Pricing"

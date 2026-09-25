@@ -43,7 +43,10 @@ export default async function PlatformHome() {
   return (
     <>
       {/* ==================================================== hero */}
-      <section className="mesh-bg relative overflow-hidden py-20 lg:py-28">
+      {/* The extra top padding is the floating header, which overlays this
+          section rather than sitting above it: 76px on a phone, 84px from lg.
+          See the note in app/(platform)/layout.js. */}
+      <section className="mesh-bg relative overflow-hidden pt-39 pb-20 lg:pt-49 lg:pb-28">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-32 -top-24 size-[30rem] rounded-full bg-brand-300/20 blur-3xl animate-float dark:bg-brand-700/20"
@@ -206,7 +209,7 @@ export function PlanCard({ plan, featured = false }) {
       }`}
     >
       {featured && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--color-brand-fg,#fff)]">
           Most popular
         </span>
       )}

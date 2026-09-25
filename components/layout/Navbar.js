@@ -102,6 +102,40 @@ export default function Navbar({ site, user, services }) {
     return () => { document.body.style.overflow = '' }
   }, [mobileOpen])
 
+  /**
+   * ------------------------------------------------------------------------
+   *  WHERE THE MOBILE MENU STARTS — measured, not assumed
+   * ------------------------------------------------------------------------
+   *  The menu used to be pinned at `top-16`, i.e. "the header is the first 64px
+   *  of the screen". That is only true for a visitor. Clinic staff also get the
+   *  status banner above the header ("Payments are not connected yet…"), which
+   *  pushes the header down — so the menu opened BEHIND it, the header's logo
+   *  and buttons sat on top of "Services", and the banner was cut in half.
+   *
+   *  So the menu starts wherever the header's bottom edge actually is. Measured
+   *  when it opens and again if the screen is rotated; the page cannot scroll
+   *  while it is open, so nothing else moves it.
+   */
+  const headerRef = useRef(null)
+  const [menuTop, setMenuTop] = useState(64)
+
+  function measureMenuTop() {
+    const bottom = headerRef.current?.getBoundingClientRect().bottom
+    if (bottom) setMenuTop(Math.max(0, Math.round(bottom)))
+  }
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    window.addEventListener('resize', measureMenuTop)
+    return () => window.removeEventListener('resize', measureMenuTop)
+  }, [mobileOpen])
+
+  function toggleMobileMenu() {
+    // Before opening, so the first frame is already in the right place.
+    measureMenuTop()
+    setMobileOpen((open) => !open)
+  }
+
   // ----------------------------------------------- Escape closes everything
   useEffect(() => {
     const onKey = (e) => {
@@ -126,7 +160,7 @@ export default function Navbar({ site, user, services }) {
           page. Invisible until focused. */}
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-110 focus:rounded-xl focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-110 focus:rounded-xl focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[var(--color-brand-fg,#fff)]"
       >
         Skip to content
       </a>
@@ -142,7 +176,7 @@ export default function Navbar({ site, user, services }) {
       />
 
       {/* ------------------------------------------------- announcement bar */}
-      <div className="hidden bg-ink-900 text-white lg:block dark:bg-ink-800">
+      <div className="hidden bg-brand-950 text-white lg:block dark:bg-brand-950/70">
         <div className="container-page flex h-9 items-center justify-between text-xs">
           <p className="flex items-center gap-2">
             <Video className="size-3.5 text-brand-300" aria-hidden="true" />
@@ -162,32 +196,44 @@ export default function Navbar({ site, user, services }) {
         </div>
       </div>
 
-      <header
-        className={cn(
-          'sticky top-0 z-50 transition-all duration-300',
-          scrolled
-            ? 'glass border-b border-ink-200/60 shadow-soft dark:border-ink-800/60'
-            : 'border-b border-transparent bg-transparent'
-        )}
-      >
-        <nav className="container-page flex h-16 items-center justify-between gap-4 lg:h-18" aria-label="Main navigation">
+      {/* A wide floating capsule, inset from the page edges and sitting over the
+          hero — the shape Raycast uses. The negative margin gives back exactly
+          the height this header occupies (12px of top padding + the bar: 64px
+          on a phone, 72px from lg), so the section below starts at the top and
+          the capsule floats over it instead of sitting in a band of its own.
+          Hero.js and PageHeader.js carry the same numbers as top padding. */}
+      <header ref={headerRef} className="sticky top-0 z-50 -mb-19 px-3 pt-3 sm:px-5 lg:-mb-21">
+        <nav
+          className={cn(
+            'mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 rounded-3xl border px-4 transition-all duration-300 lg:h-18 lg:px-6',
+            mobileOpen
+              ? 'border-ink-200 bg-white shadow-lift dark:border-ink-800 dark:bg-ink-900'
+              : scrolled
+                ? 'border-ink-200/70 bg-white/85 shadow-lift backdrop-blur-xl dark:border-white/10 dark:bg-ink-900/85'
+                : 'border-ink-200/60 bg-white/70 shadow-soft backdrop-blur-xl dark:border-white/10 dark:bg-ink-900/70'
+          )}
+          aria-label="Main navigation"
+        >
           {/* ----------------------------------------------------- logo */}
+          {/* A mark and a wordmark on one line. The city and qualification used
+              to sit under the name; in a bar this shallow they made the left
+              side two lines tall while everything else was one. */}
           <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label={`${site.name} home`}>
-            <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-brand">
-              <Stethoscope className="size-5" aria-hidden="true" />
+            <span className="grid size-8 place-items-center rounded-lg bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)]">
+              <Stethoscope className="size-4.5" aria-hidden="true" />
             </span>
-            <span className="hidden sm:block">
-              <span className="block font-display text-base font-bold leading-tight">{site.name}</span>
-              <span className="block text-[11px] font-medium leading-tight text-ink-500 dark:text-ink-400">
-                {[site.address.city, site.doctor.credentials].filter(Boolean).join(' · ')}
-              </span>
+            <span className="hidden font-display text-[17px] font-bold leading-none tracking-tight sm:block">
+              {site.name}
             </span>
           </Link>
 
           {/* ------------------------------------------- desktop links */}
           {/* One handler on the list: a click on any link or dropdown item inside
               bubbles up to here and closes the menus. */}
-          <ul className="hidden items-center gap-1 lg:flex" onClick={closeAllMenus}>
+          {/* Nothing drawn around the links at all — just quiet type with room
+              to breathe between each one, which is what makes a bar this size
+              look calm rather than crowded. */}
+          <ul className="hidden items-center gap-7 lg:flex" onClick={closeAllMenus}>
             {LINKS.map((link) => (
               <li
                 key={link.href}
@@ -201,10 +247,10 @@ export default function Navbar({ site, user, services }) {
                 <Link
                   href={link.href}
                   className={cn(
-                    'flex items-center gap-1 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors',
+                    'flex items-center gap-1 text-[15px] font-medium transition-colors',
                     isActive(link.href)
-                      ? 'text-brand-700 dark:text-brand-300'
-                      : 'text-ink-600 hover:text-ink-900 dark:text-ink-300 dark:hover:text-white'
+                      ? 'text-ink-900 dark:text-white'
+                      : 'text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-white'
                   )}
                   aria-current={isActive(link.href) ? 'page' : undefined}
                   aria-expanded={link.hasDropdown ? servicesOpen : undefined}
@@ -227,7 +273,7 @@ export default function Navbar({ site, user, services }) {
                           href={`/services/${service.slug}`}
                           className="group flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-brand-50 dark:hover:bg-brand-950/40"
                         >
-                          <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-700 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-brand-950 dark:text-brand-300">
+                          <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-700 transition-colors group-hover:bg-brand-600 group-hover:text-[var(--color-brand-fg,#fff)] dark:bg-brand-500/15 dark:text-brand-300">
                             <Icon name={service.icon} className="size-4" />
                           </span>
                           <span className="min-w-0">
@@ -240,7 +286,7 @@ export default function Navbar({ site, user, services }) {
                       ))}
                       <Link
                         href="/services"
-                        className="col-span-2 mt-1 rounded-xl bg-ink-50 px-3 py-2.5 text-center text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800 dark:bg-ink-800 dark:text-brand-300 dark:hover:bg-ink-700 dark:hover:text-brand-200"
+                        className="col-span-2 mt-1 rounded-xl bg-ink-50 px-3 py-2.5 text-center text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800 dark:bg-ink-800 dark:text-brand-300 dark:hover:bg-brand-500/15 dark:hover:text-brand-200"
                       >
                         View all treatments →
                       </Link>
@@ -252,7 +298,7 @@ export default function Navbar({ site, user, services }) {
           </ul>
 
           {/* --------------------------------------------- right side */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <ThemeToggle />
 
             {user ? (
@@ -265,20 +311,27 @@ export default function Navbar({ site, user, services }) {
             ) : (
               <Link
                 href="/login"
-                className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-ink-600 transition-colors hover:text-ink-900 sm:block dark:text-ink-300 dark:hover:text-white"
+                className="hidden shrink-0 px-2 text-[15px] font-medium whitespace-nowrap text-ink-500 transition-colors hover:text-ink-900 sm:block dark:text-ink-400 dark:hover:text-white"
               >
                 Sign in
               </Link>
             )}
 
-            <Button href="/book" size="sm" className="hidden sm:inline-flex">
-              Book appointment
-            </Button>
+            {/* Hidden on phones by a WRAPPER, not by className="hidden" on the
+                Button. cn() only joins strings, and Tailwind emits .inline-flex
+                after .hidden — so the Button's own inline-flex always won, the
+                button showed on every phone and pushed the header past the
+                screen edge. The menu below has its own "Book an appointment". */}
+            <span className="hidden sm:block">
+              <Button href="/book" size="sm">
+                Book appointment
+              </Button>
+            </span>
 
             <button
               type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="grid size-10 place-items-center rounded-xl text-ink-700 transition-colors hover:bg-ink-100 lg:hidden dark:text-ink-200 dark:hover:bg-ink-800"
+              onClick={toggleMobileMenu}
+              className="grid size-10 place-items-center rounded-xl text-ink-700 transition-colors hover:bg-brand-50 lg:hidden dark:text-ink-200 dark:hover:bg-brand-500/10"
               aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={mobileOpen}
             >
@@ -290,7 +343,11 @@ export default function Navbar({ site, user, services }) {
 
       {/* ----------------------------------------------------- mobile menu */}
       {mobileOpen && (
-        <div className="fixed inset-0 top-16 z-40 animate-fade-in lg:hidden">
+        <div
+          data-mobile-menu
+          className="fixed inset-x-0 bottom-0 z-40 animate-fade-in lg:hidden"
+          style={{ top: menuTop }}
+        >
           <button
             type="button"
             className="absolute inset-0 bg-ink-950/40 backdrop-blur-sm"
@@ -310,8 +367,8 @@ export default function Navbar({ site, user, services }) {
                     className={cn(
                       'block rounded-xl px-4 py-3 text-base font-semibold transition-colors',
                       isActive(link.href)
-                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-300'
-                        : 'text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800'
+                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200'
+                        : 'text-ink-700 hover:bg-brand-50/70 dark:text-ink-200 dark:hover:bg-brand-500/10'
                     )}
                   >
                     {link.label}
@@ -324,7 +381,7 @@ export default function Navbar({ site, user, services }) {
 
             {user ? (
               <div className="space-y-1">
-                <Link href={homeHref} className="flex items-center gap-3 rounded-xl px-4 py-3 text-base font-semibold text-ink-700 hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800">
+                <Link href={homeHref} className="flex items-center gap-3 rounded-xl px-4 py-3 text-base font-semibold text-ink-700 hover:bg-brand-50/70 dark:text-ink-200 dark:hover:bg-brand-500/10">
                   <LayoutDashboard className="size-5" aria-hidden="true" />
                   {user.role === 'patient' ? 'My dashboard' : 'Admin panel'}
                 </Link>
@@ -390,7 +447,7 @@ function UserMenu({ user, open, setOpen, homeHref }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-xl p-1 pr-2 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
+        className="flex items-center gap-2 rounded-xl p-1 pr-2 transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
         aria-expanded={open}
         aria-haspopup="menu"
       >
@@ -405,7 +462,7 @@ function UserMenu({ user, open, setOpen, homeHref }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={user.image} alt="" className="size-8 rounded-full object-cover" />
         ) : (
-          <span className="grid size-8 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+          <span className="grid size-8 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 dark:bg-brand-500/20 dark:text-brand-200">
             {initials(user.name)}
           </span>
         )}
@@ -418,7 +475,7 @@ function UserMenu({ user, open, setOpen, homeHref }) {
             <p className="truncate text-sm font-bold">{user.name}</p>
             <p className="truncate text-xs text-ink-500">{user.email}</p>
             {staff && (
-              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">
                 <Shield className="size-2.5" aria-hidden="true" />
                 {user.role}
               </span>
@@ -459,7 +516,7 @@ function MenuLink({ href, icon: LinkIcon, children }) {
     <Link
       href={href}
       role="menuitem"
-      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50 dark:text-ink-200 dark:hover:bg-ink-800"
+      className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-brand-50/70 dark:text-ink-200 dark:hover:bg-brand-500/10"
     >
       <LinkIcon className="size-4 text-ink-400" aria-hidden="true" />
       {children}

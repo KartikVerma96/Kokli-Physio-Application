@@ -28,9 +28,9 @@ const VARIANTS = {
   // The main call to action. Only one of these per screen — if everything is
   // emphasised, nothing is.
   primary:
-    // `--color-brand-fg` is set on the public layout from the clinic's colour, so
-    // a light brand gets dark text instead of unreadable white. The fallback keeps
-    // the admin — which is not inside that wrapper — exactly as it was.
+    // `--color-brand-fg` is set on <html> from the clinic's colour (app/layout.js),
+    // so a light brand gets dark text instead of unreadable white — on the website
+    // and in the admin alike. The fallback is for kokli.in, which sets none.
     'bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand hover:bg-brand-700 hover:-translate-y-0.5 active:translate-y-0',
 
   // The warm accent, for the single most important action on the page.
@@ -46,7 +46,7 @@ const VARIANTS = {
 
   // Tertiary actions: Cancel, Back, Skip.
   ghost:
-    'text-ink-600 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white',
+    'text-ink-600 hover:bg-brand-50 hover:text-brand-700 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-200',
 
   // Destructive actions. Red on purpose — a colour that makes people pause.
   danger:

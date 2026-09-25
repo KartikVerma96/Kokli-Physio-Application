@@ -65,7 +65,7 @@ export default function CopyButton({ value, label = 'code', className }) {
         'inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold transition-colors',
         copied
           ? 'text-emerald-600 dark:text-emerald-400'
-          : 'text-ink-400 hover:bg-ink-100 hover:text-ink-700 dark:hover:bg-ink-800 dark:hover:text-ink-200',
+          : 'text-ink-400 hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-brand-500/10 dark:hover:text-brand-200',
         className
       )}
     >

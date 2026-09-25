@@ -97,7 +97,7 @@ export default async function ExercisesPage() {
                     className="flex gap-4 rounded-2xl border border-ink-200 p-4 dark:border-ink-700"
                   >
                     <span
-                      className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-white"
+                      className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-[var(--color-brand-fg,#fff)]"
                       aria-hidden="true"
                     >
                       {index + 1}

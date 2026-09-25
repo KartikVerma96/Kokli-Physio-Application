@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Command } from 'lucide-react'
+import KokliLogo from '@/components/ui/KokliLogo'
 import { auth } from '@/lib/auth'
 import { getCurrentClinic } from '@/lib/tenant'
 import { platform } from '@/config/platform'
@@ -68,9 +68,7 @@ export default async function PlatformLayout({ children }) {
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-ink-200 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
           <div className="p-5">
             <Link href="/platform" className="flex items-center gap-2.5">
-              <span className="grid size-9 place-items-center rounded-xl bg-ink-900 text-white dark:bg-white dark:text-ink-900">
-                <Command className="size-4.5" aria-hidden="true" />
-              </span>
+              <KokliLogo size={36} className="size-9 shrink-0" />
               <span>
                 <span className="block font-display text-sm font-bold leading-tight">
                   {platform.name}
@@ -112,9 +110,7 @@ export default async function PlatformLayout({ children }) {
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-white/85 px-4 backdrop-blur lg:hidden dark:border-ink-800 dark:bg-ink-900/85">
             <Link href="/platform" className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-ink-900 text-white dark:bg-white dark:text-ink-900">
-                <Command className="size-4" aria-hidden="true" />
-              </span>
+              <KokliLogo size={32} className="size-8 shrink-0" />
               <span className="font-display text-sm font-bold">Platform</span>
             </Link>
             <div className="flex items-center gap-1">

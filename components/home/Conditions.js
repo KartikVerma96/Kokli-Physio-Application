@@ -1,9 +1,8 @@
-
 /**
  * ============================================================================
  *  CONDITIONS MARQUEE
  * ============================================================================
- *  A continuously scrolling band of the conditions the clinic treats.
+ *  A continuously scrolling line of the conditions the clinic treats.
  *
  *  This is doing real SEO work behind an unassuming visual. People do not search
  *  for "physiotherapy" — they search for their symptom: "sciatica treatment",
@@ -34,30 +33,53 @@ const CONDITIONS = [
 
 export default function Conditions({ site }) {
   return (
-    <section className="border-y border-ink-200 bg-white py-12 dark:border-ink-800 dark:bg-ink-900">
+    /**
+     * A flat band in the clinic's own deep colour. No glow, no drifting orbs,
+     * no fade at the edges — the colour simply starts and stops, and the
+     * scrolling line is the only thing moving.
+     */
+    <section className="relative overflow-hidden bg-brand-950 py-16 text-white">
       <div className="container-page">
-        <p className="text-center text-sm font-semibold text-ink-500 dark:text-ink-400">
-          Conditions treated at {site.name}, {site.address.city}
+        {/* Not "What we treat" — the treatments section above already uses that
+            as its eyebrow, and two sections wearing the same label read as a
+            mistake. */}
+        <p className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-brand-300">
+          Common problems
+        </p>
+        <p className="mt-2 text-center text-sm text-white/70">
+          Conditions treated at {site.name}
+          {site.address.city ? `, ${site.address.city}` : ''}
         </p>
       </div>
 
-      {/* The mask fades both ends out so the strip does not appear to be cut
-          off by the edge of the screen. A gradient mask is the cleanest way to
-          do this — no overlay divs that would need to match the background. */}
+      {/* ONE line, not two. Two rows filled the band but gave a reader twice as
+          much to track and nothing more to learn; one slow line is calmer, and
+          it leaves the colour behind it doing the work.
+
+          The pills are DARK glass, not light. Pale pills on the clinic's deep
+          colour came out as maroon on maroon and the words went soft; a darker
+          fill with a hairline highlight along the top reads as recessed glass,
+          and the text sits on it cleanly.
+
+          The mask fades both ends so the line is not seen to be cut by the edge
+          of the screen. */}
       <div
-        className="relative mt-6 overflow-hidden"
+        className="relative mt-7 overflow-hidden"
         style={{
-          maskImage: 'linear-gradient(to right, transparent, black 6%, black 94%, transparent)',
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 6%, black 94%, transparent)',
+          maskImage: 'linear-gradient(to right, transparent, black 16%, black 84%, transparent)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent, black 16%, black 84%, transparent)',
         }}
       >
-        <ul className="flex w-max animate-marquee gap-3 hover:[animation-play-state:paused]">
+        {/* 64s rather than 40s: at a walking pace the words can actually be read
+            as they pass, which is the entire point of the strip. */}
+        <ul className="flex w-max animate-marquee gap-3 [animation-duration:64s] hover:[animation-play-state:paused]">
           {[...CONDITIONS, ...CONDITIONS].map((condition, index) => (
             <li
               key={`${condition}-${index}`}
               aria-hidden={index >= CONDITIONS.length ? 'true' : undefined}
-              className="whitespace-nowrap rounded-full border border-ink-200 bg-sand-50 px-4 py-2 text-sm font-medium text-ink-700 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-200"
+              className="flex items-center gap-2.5 whitespace-nowrap rounded-full border border-white/12 bg-black/25 px-5 py-2.5 text-[15px] font-medium text-white/90 shadow-[inset_0_1px_0_rgb(255_255_255/0.10)] backdrop-blur-sm transition-colors hover:border-white/30 hover:bg-black/35 hover:text-white"
             >
+              <span className="size-1.5 rounded-full bg-brand-300" aria-hidden="true" />
               {condition}
             </li>
           ))}
@@ -77,6 +99,10 @@ export default function Conditions({ site }) {
  * is responsible for keeping honest.
  */
 export function TrustBar({ site }) {
+  // No numbers, no bar. An empty card straddling the hero looks broken, and a
+  // clinic that has not entered real figures should not be shown any.
+  if (!site.stats.length) return null
+
   return (
     /**
      * `-mt-8` lifts the card up so it straddles the boundary with the hero, which is

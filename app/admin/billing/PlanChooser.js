@@ -169,7 +169,7 @@ export default function PlanChooser({ plans, currentPlanCode, isActive }) {
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-base font-bold">{plan.name}</h3>
                 {isCurrent && (
-                  <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  <span className="rounded-full bg-brand-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-brand-fg,#fff)]">
                     Current
                   </span>
                 )}

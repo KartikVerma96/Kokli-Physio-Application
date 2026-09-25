@@ -48,7 +48,7 @@ export default function DataExportCard() {
             // the Content-Disposition header already says so. Belt and braces: some
             // in-app browsers honour one and not the other.
             download
-            className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl border border-ink-200 px-4 text-sm font-semibold transition-colors hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
+            className="mt-4 inline-flex h-11 items-center gap-2 rounded-xl border border-ink-200 px-4 text-sm font-semibold transition-colors hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10"
           >
             <Download className="size-4" aria-hidden="true" />
             Download my data (JSON)

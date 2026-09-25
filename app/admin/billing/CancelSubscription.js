@@ -161,7 +161,7 @@ export default function CancelSubscription({ onTrial, periodEndLabel }) {
           {/* Offered on the way out, not withheld. */}
           <Link
             href="/admin/settings/data"
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 px-3.5 text-sm font-semibold transition-colors hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800"
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 px-3.5 text-sm font-semibold transition-colors hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10"
           >
             <Download className="size-4" aria-hidden="true" />
             Download your data first

@@ -3,6 +3,7 @@ import { Stethoscope, ShieldCheck, Video, CalendarCheck, Quote } from 'lucide-re
 import { getCurrentClinic } from '@/lib/tenant'
 import { clinicView } from '@/lib/clinicView'
 import { platform } from '@/config/platform'
+import KokliLogo from '@/components/ui/KokliLogo'
 
 /**
  * ============================================================================
@@ -40,9 +41,16 @@ export default async function AuthLayout({ children }) {
       {/* ================================================== the form side */}
       <div className="flex w-full flex-col px-5 py-8 lg:w-[52%] lg:px-14">
         <Link href="/" className="inline-flex items-center gap-2.5 self-start">
-          <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-brand">
-            <Stethoscope className="size-5" aria-hidden="true" />
-          </span>
+          {/* Kokli's own mark when this is kokli.in, the clinic's when it is a
+              clinic's sign-in page. Sign-in is the one page that serves both
+              worlds, so the logo has to follow. */}
+          {clinic ? (
+            <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)] shadow-brand">
+              <Stethoscope className="size-5" aria-hidden="true" />
+            </span>
+          ) : (
+            <KokliLogo size={40} className="size-10 shrink-0" />
+          )}
           <span>
             <span className="block font-display text-base font-bold leading-tight">{site.name}</span>
             <span className="block text-[11px] text-ink-500">{site.address.city || site.tagline}</span>

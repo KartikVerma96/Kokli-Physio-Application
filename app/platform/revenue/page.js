@@ -115,7 +115,7 @@ export default async function RevenuePage({ searchParams }) {
       )}
 
       {/* ---------------------------------------------------------- totals */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat
           label="Collected all time"
           value={formatMoney(collected)}

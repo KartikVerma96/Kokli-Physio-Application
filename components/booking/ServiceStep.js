@@ -42,7 +42,7 @@ export default function ServiceStep({ site, services }) {
                   'relative flex cursor-pointer gap-3.5 rounded-2xl border-2 p-4 transition-all',
                   isSelected
                     ? 'border-brand-500 bg-brand-50/60 shadow-soft dark:bg-brand-950/40'
-                    : 'border-ink-200 hover:border-brand-300 hover:bg-ink-50/60 dark:border-ink-700 dark:hover:bg-ink-800/50'
+                    : 'border-ink-200 hover:border-brand-300 hover:bg-brand-50/60 dark:border-ink-700 dark:hover:bg-brand-500/10'
                 )}
               >
                 {/* A real radio input, made invisible rather than replaced by a
@@ -62,7 +62,7 @@ export default function ServiceStep({ site, services }) {
                   className={cn(
                     'grid size-10 shrink-0 place-items-center rounded-xl transition-colors',
                     isSelected
-                      ? 'bg-brand-600 text-white'
+                      ? 'bg-brand-600 text-[var(--color-brand-fg,#fff)]'
                       : 'bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400'
                   )}
                 >

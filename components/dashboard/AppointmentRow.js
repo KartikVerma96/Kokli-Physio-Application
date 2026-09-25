@@ -29,7 +29,7 @@ export default function AppointmentRow({ appointment }) {
     <li>
       <Link
         href={`/dashboard/appointments/${appointment.id}`}
-        className="flex items-center gap-4 p-4 transition-colors hover:bg-ink-50 dark:hover:bg-ink-800/50"
+        className="flex items-center gap-4 p-4 transition-colors hover:bg-brand-50/70 dark:hover:bg-brand-500/10"
       >
         {/* ----------------------------------------------------- the date */}
         {/* A small calendar-page block. Far quicker to scan down a column of

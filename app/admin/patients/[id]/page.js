@@ -126,7 +126,7 @@ export default async function PatientRecordPage({ params }) {
       </Card>
 
       {/* ------------------------------------------------------------- stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat label="Sessions completed" value={completed.length} icon={<FileText className="size-5" />} />
         <Stat
           label="Total appointments"
@@ -174,7 +174,7 @@ export default async function PatientRecordPage({ params }) {
                     <li key={appointment.id}>
                       <Link
                         href={`/admin/appointments/${appointment.id}`}
-                        className="flex items-center gap-4 p-4 transition-colors hover:bg-ink-50/60 dark:hover:bg-ink-800/40"
+                        className="flex items-center gap-4 p-4 transition-colors hover:bg-brand-50/60 dark:hover:bg-brand-500/5"
                       >
                         <div className="w-20 shrink-0">
                           <p className="text-sm font-semibold">

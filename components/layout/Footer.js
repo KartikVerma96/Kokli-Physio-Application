@@ -36,13 +36,17 @@ export default async function Footer({ site }) {
   ].filter((s) => s.href)
 
   return (
-    <footer className="arc-left relative mt-24 overflow-hidden border-t border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-900">
+    // No top margin. It used to hold 96px of page background above the footer,
+    // which read as deliberate space under a coloured band and as a hole under
+    // anything else. Every section already ends with its own padding, and the
+    // border below is the line that separates the page from the footer.
+    <footer className="arc-left relative overflow-hidden border-t border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-900">
       <div className="container-page py-14">
         <div className="grid gap-10 lg:grid-cols-12">
           {/* -------------------------------------------------- about */}
           <div className="lg:col-span-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white">
+              <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)]">
                 <Stethoscope className="size-5" aria-hidden="true" />
               </span>
               <span>
@@ -81,7 +85,7 @@ export default async function Footer({ site }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={label}
-                    className="grid size-9 place-items-center rounded-xl bg-ink-100 text-ink-600 transition-colors hover:bg-brand-600 hover:text-white dark:bg-ink-800 dark:text-ink-300"
+                    className="grid size-9 place-items-center rounded-xl bg-ink-100 text-ink-600 transition-colors hover:bg-brand-600 hover:text-[var(--color-brand-fg,#fff)] dark:bg-ink-800 dark:text-ink-300"
                   >
                     <SocialIcon className="size-4" aria-hidden="true" />
                   </a>

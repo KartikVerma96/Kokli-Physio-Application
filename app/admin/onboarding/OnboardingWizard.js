@@ -106,13 +106,13 @@ function Steps({ current, onJump }) {
                 aria-current={active ? 'step' : undefined}
                 className={cn(
                   'flex min-w-0 items-center gap-2.5 rounded-xl px-1 py-1',
-                  done && 'cursor-pointer hover:bg-ink-100 dark:hover:bg-ink-800'
+                  done && 'cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-500/10'
                 )}
               >
                 <span
                   className={cn(
                     'grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold',
-                    (done || active) && 'bg-brand-600 text-white',
+                    (done || active) && 'bg-brand-600 text-[var(--color-brand-fg,#fff)]',
                     active && 'shadow-brand ring-4 ring-brand-500/20',
                     !done && !active && 'bg-ink-100 text-ink-400 dark:bg-ink-800 dark:text-ink-500'
                   )}

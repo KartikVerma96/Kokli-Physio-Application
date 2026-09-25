@@ -203,7 +203,7 @@ export default function BrandingForm({ brandColour, clinicName, slug }) {
           href={`/`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs font-semibold text-ink-500 underline hover:text-ink-900 dark:hover:text-white"
+          className="text-xs font-semibold text-ink-500 underline hover:text-brand-700 dark:hover:text-brand-200"
         >
           View {slug}&rsquo;s public website →
         </a>

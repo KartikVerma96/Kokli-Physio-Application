@@ -52,7 +52,7 @@ export default function NotFound() {
   return (
     <div className="mesh-bg flex min-h-screen flex-col items-center justify-center p-6 text-center">
       <Link href="/" className="flex items-center gap-2.5">
-        <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-brand">
+        <span className="grid size-10 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)] shadow-brand">
           <Stethoscope className="size-5" aria-hidden="true" />
         </span>
         <span className="font-display text-base font-bold">{platform.name}</span>

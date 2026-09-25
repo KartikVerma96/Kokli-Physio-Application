@@ -97,7 +97,7 @@ export default async function AdminLayout({ children }) {
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-ink-200 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
           <div className="p-5">
             <Link href="/admin" className="flex items-center gap-2.5">
-              <span className="grid size-9 place-items-center rounded-xl bg-ink-900 text-white dark:bg-white dark:text-ink-900">
+              <span className="grid size-9 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)] shadow-brand">
                 <Stethoscope className="size-4.5" aria-hidden="true" />
               </span>
               <span>
@@ -115,7 +115,7 @@ export default async function AdminLayout({ children }) {
 
           <div className="border-t border-ink-100 p-3 dark:border-ink-800">
             <div className="flex items-center gap-2.5 rounded-xl p-2">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ink-900 text-xs font-bold text-white dark:bg-ink-700">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 dark:bg-brand-500/20 dark:text-brand-200">
                 {initials(user.name)}
               </span>
               <div className="min-w-0 flex-1">
@@ -131,7 +131,7 @@ export default async function AdminLayout({ children }) {
             </div>
             <Link
               href="/"
-              className="mt-1 block rounded-xl px-3 py-2 text-xs font-medium text-ink-500 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
+              className="mt-1 block rounded-xl px-3 py-2 text-xs font-medium text-ink-500 transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
             >
               View public website →
             </Link>
@@ -143,7 +143,7 @@ export default async function AdminLayout({ children }) {
         <div className="min-w-0 flex-1">
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-white/85 px-4 backdrop-blur lg:hidden dark:border-ink-800 dark:bg-ink-900/85">
             <Link href="/admin" className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-ink-900 text-white dark:bg-white dark:text-ink-900">
+              <span className="grid size-8 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)] shadow-brand">
                 <Stethoscope className="size-4" aria-hidden="true" />
               </span>
               <span className="font-display text-sm font-bold">Clinic admin</span>

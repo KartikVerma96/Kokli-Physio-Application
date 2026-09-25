@@ -100,7 +100,7 @@ export default async function DashboardLayout({ children }) {
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-ink-200 bg-white lg:flex dark:border-ink-800 dark:bg-ink-900">
           <div className="p-5">
             <Link href="/" className="flex items-center gap-2.5">
-              <span className="grid size-9 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-white">
+              <span className="grid size-9 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)]">
                 <Stethoscope className="size-4.5" aria-hidden="true" />
               </span>
               <span>
@@ -154,7 +154,7 @@ export default async function DashboardLayout({ children }) {
           {/* ------------------------------------------- mobile top bar */}
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ink-200 bg-white/85 px-4 backdrop-blur lg:hidden dark:border-ink-800 dark:bg-ink-900/85">
             <Link href="/" className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-white">
+              <span className="grid size-8 place-items-center rounded-xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)]">
                 <Stethoscope className="size-4" aria-hidden="true" />
               </span>
               <span className="font-display text-sm font-bold">{site.name}</span>

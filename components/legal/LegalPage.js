@@ -23,7 +23,9 @@ import { platform, legalAddress } from '@/config/platform'
 
 export default function LegalPage({ title, intro, updated, children }) {
   return (
-    <div className="container-page py-14 lg:py-20">
+    // pt = the old py plus the height the floating header overlays: 76px on a
+    // phone, 84px from lg. See the note in app/(platform)/layout.js.
+    <div className="container-page pt-33 pb-14 lg:pt-41 lg:pb-20">
       <div className="mx-auto max-w-3xl">
         <h1 className="font-display text-3xl font-bold lg:text-4xl">{title}</h1>
         {intro && (

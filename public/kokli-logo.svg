@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Physiotherapy rehabilitation logo</title>
+  <desc id="desc">A vector logo showing a therapist assisting a patient on a treatment table, with a rehabilitation arc and spine-inspired dots.</desc>
+
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#155B9E"/>
+      <stop offset="1" stop-color="#06487F"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1499E8"/>
+      <stop offset="1" stop-color="#0876C9"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#18BFA5"/>
+      <stop offset="1" stop-color="#05A887"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer rehabilitation arc -->
+  <path d="M 195 610 A 355 355 0 0 1 760 185"
+        fill="none" stroke="url(#teal)" stroke-width="34"
+        stroke-linecap="round"/>
+
+  <!-- Therapist head -->
+  <circle cx="535" cy="310" r="58" fill="url(#navy)"/>
+
+  <!-- Therapist torso and arm -->
+  <path d="M 438 392
+           C 405 405 381 438 374 477
+           L 356 610
+           C 351 647 379 671 414 658
+           L 458 640
+           L 472 527
+           C 489 539 507 552 530 563
+           C 563 579 601 590 640 588
+           C 660 587 675 573 671 554
+           C 668 537 654 528 636 528
+           C 607 529 580 518 557 500
+           L 491 447
+           C 474 431 459 414 438 392 Z"
+        fill="url(#navy)"/>
+
+  <!-- Therapist lower leg -->
+  <path d="M 590 500
+           C 620 481 653 471 682 487
+           L 805 650
+           C 818 668 814 690 796 701
+           C 778 712 756 706 743 689
+           L 648 574
+           L 611 623
+           C 598 640 576 647 556 638
+           L 510 618
+           Z"
+        fill="url(#blue)"/>
+
+  <!-- Patient head -->
+  <circle cx="232" cy="650" r="54" fill="url(#blue)"/>
+
+  <!-- Patient body / treatment surface -->
+  <path d="M 278 650
+           C 310 621 352 606 399 607
+           L 653 607
+           C 676 607 693 620 699 639
+           C 704 657 691 674 671 676
+           L 327 676
+           C 304 676 284 666 278 650 Z"
+        fill="url(#blue)"/>
+
+  <!-- Treatment table -->
+  <rect x="150" y="690" width="735" height="58" rx="29" fill="url(#navy)"/>
+  <path d="M 240 748 L 207 820 Q 202 834 218 834 H 242 Q 253 834 258 822 L 290 748 Z"
+        fill="url(#navy)"/>
+  <path d="M 744 748 L 775 822 Q 780 834 792 834 H 816 Q 831 834 825 820 L 795 748 Z"
+        fill="url(#navy)"/>
+
+  <!-- Spine-inspired right-side swoosh -->
+  <path d="M 790 292
+           C 757 342 752 394 766 448
+           C 780 503 792 555 775 618
+           C 769 641 760 661 748 680"
+        fill="none" stroke="url(#teal)" stroke-width="27"
+        stroke-linecap="round"/>
+
+  <!-- Spine dots -->
+  <g fill="url(#teal)">
+    <circle cx="812" cy="282" r="15"/>
+    <circle cx="829" cy="331" r="18"/>
+    <circle cx="839" cy="386" r="21"/>
+    <circle cx="843" cy="445" r="23"/>
+    <circle cx="839" cy="505" r="22"/>
+    <circle cx="828" cy="562" r="20"/>
+    <circle cx="811" cy="616" r="17"/>
+  </g>
+</svg>

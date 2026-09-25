@@ -81,7 +81,7 @@ export default function HowItWorks({ site }) {
               <li className="card relative h-full p-6">
                 {/* The step number, sitting half-outside the card corner. */}
                 <span
-                  className="absolute -top-3.5 left-6 grid size-7 place-items-center rounded-lg bg-brand-600 text-xs font-bold text-white shadow-brand"
+                  className="absolute -top-3.5 left-6 grid size-7 place-items-center rounded-lg bg-brand-600 text-xs font-bold text-[var(--color-brand-fg,#fff)] shadow-brand"
                   aria-hidden="true"
                 >
                   {index + 1}

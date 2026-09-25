@@ -122,7 +122,7 @@ export default function RecallList({ title, why, icon, tone, rows }) {
                       href={`tel:${String(row.phone).replace(/\s/g, '')}`}
                       title={`Call ${row.phone}`}
                       aria-label={`Call ${row.name} on ${row.phone}`}
-                      className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+                      className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
                     >
                       <Phone className="size-4" />
                     </a>
@@ -147,7 +147,7 @@ export default function RecallList({ title, why, icon, tone, rows }) {
                   disabled={pending && busyId === row.patientId}
                   title="Record that you have contacted them"
                   aria-label={`Mark ${row.name} as contacted`}
-                  className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-900 dark:hover:text-white disabled:opacity-40 dark:hover:bg-ink-800"
+                  className="grid size-9 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-200 disabled:opacity-40 dark:hover:bg-brand-500/10"
                 >
                   {pending && busyId === row.patientId ? (
                     <Clock className="size-4 animate-pulse" />
