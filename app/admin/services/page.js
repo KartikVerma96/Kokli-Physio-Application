@@ -1,4 +1,5 @@
 import { getAllServices } from '@/lib/queries'
+import { countOf } from '@/lib/utils'
 import { requireCurrentClinic } from '@/lib/tenant'
 import { Card } from '@/components/ui/Card'
 import { Info } from 'lucide-react'
@@ -29,8 +30,8 @@ export default async function AdminServicesPage() {
       <div>
         <h1 className="text-2xl font-bold lg:text-3xl">Services & pricing</h1>
         <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
-          {services.length} treatments · {services.filter((s) => s.is_active).length} visible on the
-          website
+          {countOf(services.length, 'treatment')} · {services.filter((s) => s.is_active).length} visible on
+          the website
         </p>
       </div>
 

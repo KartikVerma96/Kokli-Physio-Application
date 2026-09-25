@@ -6,7 +6,7 @@ import {
 import { auth } from '@/lib/auth'
 import { getAppointmentForUser, getAppointmentNotes, getPatientRecord } from '@/lib/queries'
 import { requireCurrentClinic } from '@/lib/tenant'
-import { clinicView } from '@/lib/clinicView'
+import { clinicView, formattedAddress } from '@/lib/clinicView'
 import {
   formatMoney, formatDateLong, formatTime, statusMeta, ageFrom, canJoinCall,
 } from '@/lib/utils'
@@ -333,7 +333,7 @@ export default async function AdminAppointmentPage({ params }) {
             <p className="mt-2 text-sm text-ink-600 dark:text-ink-400">
               {isOnline
                 ? 'A private video room opens for both of you 10 minutes before the slot.'
-                : `${site.address.line1}, ${site.address.line2}, ${site.address.city}`}
+                : formattedAddress(site) || 'At the clinic'}
             </p>
             {isOnline && appointment.room_id && (
               <p className="mt-2 font-mono text-[10px] text-ink-400">

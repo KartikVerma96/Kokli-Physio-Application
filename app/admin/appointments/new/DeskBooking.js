@@ -20,7 +20,7 @@
  * ============================================================================
  */
 
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Search, UserPlus, Calendar, Check, IndianRupee, Layers, Clock, Loader2, User,
@@ -32,7 +32,7 @@ import { Card, Badge } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Field'
 import Button from '@/components/ui/Button'
 import { toast } from '@/lib/toast'
-import { formatMoney, formatDateLong } from '@/lib/utils'
+import { formatMoney, formatDateLong, countOf } from '@/lib/utils'
 
 const METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -194,7 +194,6 @@ export default function DeskBooking({ services, allowPayLater, disabled }) {
                     ? `${chosenPackage.sessionsRemaining} of ${chosenPackage.sessionsTotal} sessions left on ${chosenPackage.name}`
                     : 'Use a prepaid session'
                 }
-                tone="brand"
               />
             )}
 
@@ -307,9 +306,22 @@ function PatientStep({ patient, onChoose, onClear }) {
     })
   }
 
+  /**
+   * The new-patient fields are NOT a <form>.
+   *
+   * This whole step renders inside the booking <form>, and a form inside a form
+   * is invalid HTML — React logged a hydration error for it, and pressing Enter
+   * in the name box could submit the BOOKING instead of adding the patient. So
+   * this is a plain group: values are read from its inputs, and Enter is caught
+   * here before it reaches the outer form. The inputs carry their own names so
+   * they never mix with the booking's fields either.
+   */
+  const newPatientRef = useRef(null)
+
   function create(event) {
-    event.preventDefault()
-    submit(Object.fromEntries(new FormData(event.currentTarget)))
+    event?.preventDefault()
+    const read = (field) => newPatientRef.current?.querySelector(`[name="${field}"]`)?.value ?? ''
+    submit({ name: read('newPatientName'), phone: read('newPatientPhone'), email: read('newPatientEmail') })
   }
 
   /** `values.allowSharedPhone` is what reception's "someone else" answer sets. */
@@ -401,7 +413,7 @@ function PatientStep({ patient, onChoose, onClear }) {
                   <button
                     type="button"
                     onClick={() => onChoose(p)}
-                    className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-ink-50 dark:hover:bg-ink-800/60"
+                    className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-brand-50/70 dark:hover:bg-brand-500/10"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{p.name}</span>
@@ -409,7 +421,7 @@ function PatientStep({ patient, onChoose, onClear }) {
                         {p.phone || p.email || 'no contact details'}
                       </span>
                     </span>
-                    {p.visits > 0 && <Badge tone="neutral">{p.visits} visits</Badge>}
+                    {p.visits > 0 && <Badge tone="neutral">{countOf(p.visits, 'visit')}</Badge>}
                     <Check className="size-4 shrink-0 text-ink-300" aria-hidden="true" />
                   </button>
                 </li>
@@ -430,13 +442,21 @@ function PatientStep({ patient, onChoose, onClear }) {
           New patient
         </button>
       ) : (
-        <form onSubmit={create} className="mt-5 space-y-4 rounded-2xl border border-ink-200 p-4 dark:border-ink-700">
+        <div
+          ref={newPatientRef}
+          role="group"
+          aria-label="New patient"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && event.target.tagName === 'INPUT') create(event)
+          }}
+          className="mt-5 space-y-4 rounded-2xl border border-ink-200 p-4 dark:border-ink-700"
+        >
           <p className="text-sm font-bold">New patient</p>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Input label="Full name" name="name" error={errors.name} required />
+            <Input label="Full name" name="newPatientName" error={errors.name} required />
             <Input
               label="Phone"
-              name="phone"
+              name="newPatientPhone"
               type="tel"
               inputMode="tel"
               error={errors.phone}
@@ -444,7 +464,7 @@ function PatientStep({ patient, onChoose, onClear }) {
             />
             <Input
               label="Email"
-              name="email"
+              name="newPatientEmail"
               type="email"
               error={errors.email}
               hint="Optional"
@@ -499,14 +519,14 @@ function PatientStep({ patient, onChoose, onClear }) {
           )}
 
           <div className="flex gap-3">
-            <Button type="submit" size="sm" loading={creating}>
+            <Button type="button" size="sm" loading={creating} onClick={create}>
               {creating ? 'Adding…' : 'Add and continue'}
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setAdding(false)}>
               Cancel
             </Button>
           </div>
-        </form>
+        </div>
       )}
     </Card>
   )
@@ -574,7 +594,7 @@ function SlotStep({ serviceId, mode, date, startTime, onDate, onTime, error }) {
                   className={`shrink-0 rounded-xl border px-3 py-2 text-center text-xs transition-colors ${
                     date === d.date
                       ? 'border-brand-500 bg-brand-50 font-bold text-brand-800 dark:bg-brand-950/60 dark:text-brand-200'
-                      : 'border-ink-200 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800/60'
+                      : 'border-ink-200 hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10'
                   }`}
                 >
                   {/* /api/slots returns only { date, isOpen, isToday }, so the
@@ -610,8 +630,8 @@ function SlotStep({ serviceId, mode, date, startTime, onDate, onTime, error }) {
                       onClick={() => onTime(s.startTime)}
                       className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
                         startTime === s.startTime
-                          ? 'border-brand-500 bg-brand-600 text-white'
-                          : 'border-ink-200 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800/60'
+                          ? 'border-brand-500 bg-brand-600 text-[var(--color-brand-fg,#fff)]'
+                          : 'border-ink-200 hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10'
                       }`}
                     >
                       {s.label}
@@ -659,7 +679,7 @@ function partsOf(iso) {
 function StepHeading({ number, title }) {
   return (
     <h2 className="flex items-center gap-2.5 font-bold">
-      <span className="grid size-6 place-items-center rounded-full bg-ink-900 text-[11px] text-white dark:bg-white dark:text-ink-900">
+      <span className="grid size-6 place-items-center rounded-full bg-brand-600 text-[11px] text-[var(--color-brand-fg,#fff)]">
         {number}
       </span>
       {title}
@@ -667,7 +687,7 @@ function StepHeading({ number, title }) {
   )
 }
 
-function PaymentChoice({ checked, onSelect, icon: Icon, title, detail, tone }) {
+function PaymentChoice({ checked, onSelect, icon: Icon, title, detail }) {
   return (
     <button
       type="button"
@@ -675,10 +695,8 @@ function PaymentChoice({ checked, onSelect, icon: Icon, title, detail, tone }) {
       aria-pressed={checked}
       className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
         checked
-          ? tone === 'brand'
-            ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/50'
-            : 'border-ink-900 bg-ink-50 dark:border-white dark:bg-ink-800/60'
-          : 'border-ink-200 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800/60'
+          ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:border-brand-400 dark:bg-brand-500/10 dark:ring-brand-400'
+          : 'border-ink-200 hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10'
       }`}
     >
       <Icon

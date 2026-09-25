@@ -19,6 +19,7 @@ import { useSelector } from 'react-redux'
 import { Calendar, Clock, MapPin, Video, IndianRupee, ShieldCheck, CircleDashed } from 'lucide-react'
 import { selectBooking } from '@/store/slices/bookingSlice'
 import { formatMoney, formatDateLong, formatTime } from '@/lib/utils'
+import { doctorLine, shortAddress } from '@/lib/clinicView'
 import Icon from '@/components/ui/Icon'
 
 export default function BookingSummary({ site }) {
@@ -33,7 +34,7 @@ export default function BookingSummary({ site }) {
         <div className="border-b border-ink-100 bg-linear-to-br from-brand-50 to-white p-5 dark:border-ink-800 dark:from-brand-950/40 dark:to-ink-900">
           <h2 className="font-bold">Your appointment</h2>
           <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
-            With {site.doctor.name}, {site.doctor.credentials}
+            With {doctorLine(site)}
           </p>
         </div>
 
@@ -57,7 +58,7 @@ export default function BookingSummary({ site }) {
             secondary={
               mode === 'online'
                 ? 'Link appears in your dashboard'
-                : `${site.address.line1}, ${site.address.city}`
+                : shortAddress(site)
             }
           />
 

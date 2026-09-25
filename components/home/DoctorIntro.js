@@ -2,6 +2,7 @@ import { BadgeCheck, GraduationCap, Languages, Quote } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Reveal from '@/components/ui/Reveal'
 import { initials, firstName } from '@/lib/utils'
+import { joinDot } from '@/lib/clinicView'
 
 /**
  * ============================================================================
@@ -55,7 +56,7 @@ export default function DoctorIntro({ site }) {
                 <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-ink-950/90 to-transparent p-5 pt-12">
                   <p className="font-display text-xl font-bold text-white">{site.doctor.name}</p>
                   <p className="text-sm text-white/75">
-                    {site.doctor.title} · {site.doctor.credentials}
+                    {joinDot(site.doctor.title, site.doctor.credentials)}
                   </p>
                 </div>
               </div>

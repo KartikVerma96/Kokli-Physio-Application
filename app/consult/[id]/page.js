@@ -6,7 +6,7 @@ import { getAppointmentForUser } from '@/lib/queries'
 import { createVideoToken } from '@/lib/videoToken'
 import { canJoinCall, formatDateLong, formatTime, todayISO } from '@/lib/utils'
 import { requireCurrentClinic, clinicHasFeature } from '@/lib/tenant'
-import { clinicView } from '@/lib/clinicView'
+import { clinicView, shortAddress } from '@/lib/clinicView'
 import Button from '@/components/ui/Button'
 import VideoRoom from '@/components/video/VideoRoom'
 
@@ -89,7 +89,7 @@ export default async function ConsultPage({ params }) {
       <Gate
         icon={CalendarX2}
         title="This is an in-clinic appointment"
-        message={`Your ${appointment.service_name} appointment is booked at the clinic, not online. Please come to ${site.address.line1}, ${site.address.city} at ${formatTime(appointment.start_time)} on ${formatDateLong(appointment.appointment_date)}.`}
+        message={`Your ${appointment.service_name} appointment is booked at the clinic, not online. Please come to ${shortAddress(site) || 'the clinic'} at ${formatTime(appointment.start_time)} on ${formatDateLong(appointment.appointment_date)}.`}
         appointmentId={appointment.id}
         site={site}
       />

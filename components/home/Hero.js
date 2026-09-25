@@ -3,7 +3,8 @@ import {
   ArrowRight, CalendarCheck, ShieldCheck, Star, Video, MapPin, Clock, CheckCircle2,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
-import { formatTime, formatDateRelative, firstName } from '@/lib/utils'
+import { formatTime, formatDateRelative, firstName, countOf } from '@/lib/utils'
+import { joinDot } from '@/lib/clinicView'
 
 /**
  * ============================================================================
@@ -44,7 +45,10 @@ export default function Hero({ site, nextSlot, servicesCount = 10 }) {
       .join(' ') || null
 
   return (
-    <section className="mesh-bg relative overflow-hidden pt-12 pb-20 lg:pt-20 lg:pb-28">
+    // The extra top padding is the floating header, which overlays this section
+    // rather than sitting in a band above it: 76px on a phone, 84px from lg.
+    // See the note in Navbar.js — change one and the other has to follow.
+    <section className="mesh-bg relative overflow-hidden pt-31 pb-20 lg:pt-41 lg:pb-28">
       {/* Two large soft blobs drifting behind the content. `aria-hidden` and
           pointer-events-none keep them decorative — invisible to screen readers
           and unable to intercept a click. */}
@@ -76,7 +80,7 @@ export default function Hero({ site, nextSlot, servicesCount = 10 }) {
             {badge && (
               <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 py-1.5 pl-1.5 pr-4 text-sm font-medium shadow-soft backdrop-blur dark:border-brand-800 dark:bg-ink-900/70">
                 {rating && (
-                  <span className="flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-1 text-xs font-bold text-white">
+                  <span className="flex items-center gap-1 rounded-full bg-brand-600 px-2.5 py-1 text-xs font-bold text-[var(--color-brand-fg,#fff)]">
                     <Star className="size-3 fill-current" aria-hidden="true" />
                     {rating}
                   </span>
@@ -151,7 +155,7 @@ export default function Hero({ site, nextSlot, servicesCount = 10 }) {
                       <p className="mt-1.5 text-2xl font-bold">Book your slot</p>
                     )}
                   </div>
-                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-600 text-white shadow-brand">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand">
                     <CalendarCheck className="size-5" aria-hidden="true" />
                   </span>
                 </div>
@@ -190,7 +194,7 @@ export default function Hero({ site, nextSlot, servicesCount = 10 }) {
                   )}
                   <p className="flex items-center gap-2 text-ink-600 dark:text-ink-300">
                     <ShieldCheck className="size-4 shrink-0 text-ink-400" aria-hidden="true" />
-                    {servicesCount} treatments · secure online payment
+                    {countOf(servicesCount, 'treatment')} · secure online payment
                   </p>
                 </div>
               </div>
@@ -208,9 +212,9 @@ export default function Hero({ site, nextSlot, servicesCount = 10 }) {
                 <ShieldCheck className="size-4" aria-hidden="true" />
               </span>
               <div>
-                <p className="text-xs font-bold leading-tight">{site.doctor.credentials}</p>
+                <p className="text-xs font-bold leading-tight">{site.doctor.credentials || site.doctor.title}</p>
                 <p className="text-[11px] leading-tight text-ink-500">
-                  Registered physiotherapist · {site.doctor.registration}
+                  {joinDot('Registered physiotherapist', site.doctor.registration)}
                 </p>
               </div>
             </div>

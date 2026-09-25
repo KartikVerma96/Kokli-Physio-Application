@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { getAppointmentForUser, getAppointmentNotes } from '@/lib/queries'
-import { clinicView, whatsappLink } from '@/lib/clinicView'
+import { clinicView, whatsappLink, withCredentials, shortAddress } from '@/lib/clinicView'
 import { requireCurrentClinic } from '@/lib/tenant'
 import {
   formatMoney, formatDateLong, formatTime, statusMeta, canJoinCall, isRefundable,
@@ -120,7 +120,7 @@ export default async function AppointmentDetailPage({ params, searchParams }) {
 
             <h1 className="mt-3 text-2xl font-bold">{appointment.service_name}</h1>
             <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
-              With {appointment.physio_name}, {site.doctor.credentials}
+              With {withCredentials(appointment.physio_name, site.doctor.credentials)}
             </p>
           </div>
 
@@ -140,7 +140,7 @@ export default async function AppointmentDetailPage({ params, searchParams }) {
           <Detail
             icon={isOnline ? Video : MapPin}
             label="Where"
-            value={isOnline ? 'Online video call' : `${site.address.line1}, ${site.address.city}`}
+            value={isOnline ? 'Online video call' : shortAddress(site) || 'At the clinic'}
           />
           <Detail icon={Receipt} label="Paid" value={formatMoney(appointment.amount_paise)} />
         </dl>
@@ -360,7 +360,7 @@ export default async function AppointmentDetailPage({ params, searchParams }) {
                 className="flex gap-4 rounded-2xl border border-ink-200 p-4 dark:border-ink-700"
               >
                 <span
-                  className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-white"
+                  className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-[var(--color-brand-fg,#fff)]"
                   aria-hidden="true"
                 >
                   {index + 1}

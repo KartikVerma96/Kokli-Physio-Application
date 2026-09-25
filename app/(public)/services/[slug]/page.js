@@ -4,7 +4,7 @@ import {
   Clock, IndianRupee, MapPin, Video, CheckCircle2, ArrowRight, Stethoscope, ShieldCheck,
 } from 'lucide-react'
 import { requireCurrentClinic } from '@/lib/tenant'
-import { clinicView } from '@/lib/clinicView'
+import { clinicView, doctorLine } from '@/lib/clinicView'
 import { getServiceBySlug, getActiveServices } from '@/lib/queries'
 import { buildMetadata, JsonLd, serviceSchema, breadcrumbSchema, faqSchema } from '@/lib/seo'
 import { formatMoney } from '@/lib/utils'
@@ -134,7 +134,7 @@ export default async function ServicePage({ params }) {
               <div>
                 <h2 className="text-2xl font-bold">About this treatment</h2>
                 <p className="mt-1 text-sm text-ink-500">
-                  With {site.doctor.name}, {site.doctor.credentials}
+                  With {doctorLine(site)}
                 </p>
               </div>
             </div>
@@ -180,7 +180,7 @@ export default async function ServicePage({ params }) {
                   {expectations.map((step, index) => (
                     <li key={step} className="flex gap-4">
                       <span
-                        className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-white"
+                        className="grid size-8 shrink-0 place-items-center rounded-xl bg-brand-600 text-sm font-bold text-[var(--color-brand-fg,#fff)]"
                         aria-hidden="true"
                       >
                         {index + 1}
@@ -286,7 +286,7 @@ export default async function ServicePage({ params }) {
               {/* ------------------------------------------ practitioner */}
               <div className="card p-6">
                 <div className="flex items-center gap-3">
-                  <span className="grid size-11 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white">
+                  <span className="grid size-11 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-[var(--color-brand-fg,#fff)]">
                     <Stethoscope className="size-5" aria-hidden="true" />
                   </span>
                   <div>
@@ -316,7 +316,7 @@ export default async function ServicePage({ params }) {
                           href={`/services/${item.slug}`}
                           className="group flex items-center gap-3"
                         >
-                          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-600 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-ink-800 dark:text-ink-300">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ink-100 text-ink-600 transition-colors group-hover:bg-brand-600 group-hover:text-[var(--color-brand-fg,#fff)] dark:bg-ink-800 dark:text-ink-300">
                             <Icon name={item.icon} className="size-4" />
                           </span>
                           <span className="min-w-0 flex-1">

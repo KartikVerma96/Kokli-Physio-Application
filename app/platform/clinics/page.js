@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Search, Building2, ExternalLink, Users, CalendarDays } from 'lucide-react'
 import { getAllClinics, getPublicPlans } from '@/lib/queries'
 import { clinicUrl } from '@/config/platform'
-import { formatMoney, formatDateShort } from '@/lib/utils'
+import { formatMoney, formatDateShort, countOf } from '@/lib/utils'
 import { Card, Badge, EmptyState } from '@/components/ui/Card'
 import ClinicActions from './ClinicActions'
 
@@ -79,7 +79,7 @@ export default async function PlatformClinicsPage({ searchParams }) {
               />
             </div>
           </div>
-          <button type="submit" className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700">
+          <button type="submit" className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-[var(--color-brand-fg,#fff)] hover:bg-brand-700">
             Search
           </button>
           {(search || status) && (
@@ -173,12 +173,12 @@ export default async function PlatformClinicsPage({ searchParams }) {
                       <div className="flex items-center gap-1.5">
                         <Users className="size-3.5" aria-hidden="true" />
                         <dt className="sr-only">Patients</dt>
-                        <dd>{clinic.patient_count} patients</dd>
+                        <dd>{countOf(clinic.patient_count, 'patient')}</dd>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <CalendarDays className="size-3.5" aria-hidden="true" />
                         <dt className="sr-only">Appointments</dt>
-                        <dd>{clinic.appointment_count} appointments</dd>
+                        <dd>{countOf(clinic.appointment_count, 'appointment')}</dd>
                       </div>
                       <div>
                         <dt className="sr-only">Joined</dt>

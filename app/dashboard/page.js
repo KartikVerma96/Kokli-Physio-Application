@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { requireCurrentClinic } from '@/lib/tenant'
-import { clinicView } from '@/lib/clinicView'
+import { clinicView, shortAddress } from '@/lib/clinicView'
 import {
   getNextAppointment, getPatientAppointments, getPatientExercises, getActiveServices,
 } from '@/lib/queries'
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
       )}
 
       {/* ------------------------------------------------------------ stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat
           label="Upcoming"
           value={upcoming}
@@ -228,7 +228,7 @@ export default async function DashboardPage() {
                 <li key={service.id}>
                   <Link
                     href={`/book?service=${service.slug}`}
-                    className="group flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-ink-50 dark:hover:bg-ink-800"
+                    className="group flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-brand-50/70 dark:hover:bg-brand-500/10"
                   >
                     <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-300">
                       <Icon name={service.icon} className="size-4" />
@@ -308,13 +308,13 @@ function NextAppointmentCard({ appointment, site }) {
                 )}
                 <dt className="sr-only">Where</dt>
                 <dd className="font-semibold">
-                  {isOnline ? 'Online video call' : `${site.address.line1}, ${site.address.city}`}
+                  {isOnline ? 'Online video call' : shortAddress(site) || 'At the clinic'}
                 </dd>
               </div>
             </dl>
           </div>
 
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-600 text-white shadow-brand">
+          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand">
             <Icon name={appointment.service_icon} className="size-7" />
           </span>
         </div>

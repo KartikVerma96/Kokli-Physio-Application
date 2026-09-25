@@ -1,4 +1,4 @@
-import { MapPin, Phone, Mail, Clock, MessageCircle, Car, Bus, TriangleAlert } from 'lucide-react'
+import { MapPin, Phone, Mail, Clock, MessageCircle, TriangleAlert } from 'lucide-react'
 import { requireCurrentClinic } from '@/lib/tenant'
 import { clinicView } from '@/lib/clinicView'
 import { formattedAddress, whatsappLink, telLink } from '@/lib/clinicView'
@@ -98,7 +98,7 @@ export default async function ContactPage() {
               {...(channel.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className="card group p-6 transition-all hover:-translate-y-1 hover:border-brand-200 hover:shadow-lift dark:hover:border-brand-800"
             >
-              <span className="grid size-11 place-items-center rounded-2xl bg-brand-50 text-brand-600 transition-colors group-hover:bg-brand-600 group-hover:text-white dark:bg-brand-950/60 dark:text-brand-300">
+              <span className="grid size-11 place-items-center rounded-2xl bg-brand-50 text-brand-600 transition-colors group-hover:bg-brand-600 group-hover:text-[var(--color-brand-fg,#fff)] dark:bg-brand-950/60 dark:text-brand-300">
                 <channel.icon className="size-5" aria-hidden="true" />
               </span>
               <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-500">
@@ -152,23 +152,28 @@ export default async function ContactPage() {
             </div>
 
             {/* ----------------------------------------- getting here */}
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <div className="card p-6">
-                <Car className="size-5 text-brand-600" aria-hidden="true" />
-                <h2 className="mt-3 text-base font-bold">Parking</h2>
-                <p className="mt-2 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
-                  Free two-wheeler parking in the building compound. Car parking is available on
-                  the basement level — take the ramp to the left of the main entrance.
-                </p>
-              </div>
-              <div className="card p-6">
-                <Bus className="size-5 text-brand-600" aria-hidden="true" />
-                <h2 className="mt-3 text-base font-bold">Public transport</h2>
-                <p className="mt-2 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
-                  Nearest bus stop is {site.address.line2}, a two-minute walk. Autos and cabs will
-                  know the arcade by name; the clinic is on the second floor with lift access.
-                </p>
-              </div>
+            {/* Only what the clinic has actually told us. This used to promise
+                "free two-wheeler parking, car parking in the basement, second
+                floor with lift access" and named address line 2 as the nearest
+                bus stop — on EVERY clinic's page, true or not. A patient who
+                drives over expecting basement parking blames the clinic. */}
+            <div className="card mt-6 p-6">
+              <MapPin className="size-5 text-brand-600" aria-hidden="true" />
+              <h2 className="mt-3 text-base font-bold">Finding us</h2>
+              <p className="mt-2 text-sm leading-relaxed text-ink-600 dark:text-ink-400">
+                {formattedAddress(site) || site.name}.{' '}
+                {telLink(site) ? (
+                  <>
+                    Coming for the first time? Call{' '}
+                    <a href={telLink(site)} className="font-semibold text-brand-700 hover:underline dark:text-brand-300">
+                      {site.contact.phone}
+                    </a>{' '}
+                    and we will guide you in.
+                  </>
+                ) : (
+                  'The map above has directions to the door.'
+                )}
+              </p>
             </div>
           </div>
 

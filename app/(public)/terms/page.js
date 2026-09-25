@@ -1,5 +1,5 @@
 import { requireCurrentClinic } from '@/lib/tenant'
-import { clinicView, formattedAddress } from '@/lib/clinicView'
+import { clinicView, formattedAddress, doctorLine } from '@/lib/clinicView'
 import { buildMetadata } from '@/lib/seo'
 import PageHeader from '@/components/layout/PageHeader'
 
@@ -55,9 +55,10 @@ export default async function TermsPage() {
 
           <h2>Who treats you</h2>
           <p>
-            Treatment is provided by {site.doctor.name}, {site.doctor.credentials}, registered with the
-            state physiotherapy council under number {site.doctor.registration}. If you would like to
-            verify that registration, we will happily give you the details to do so.
+            Treatment is provided by {doctorLine(site)}
+            {site.doctor.registration
+              ? `, registered with the state physiotherapy council under number ${site.doctor.registration}. If you would like to verify that registration, we will happily give you the details to do so.`
+              : '.'}
           </p>
 
           <h2>Booking and payment</h2>

@@ -1,5 +1,5 @@
 import { requireCurrentClinic } from '@/lib/tenant'
-import { clinicView } from '@/lib/clinicView'
+import { clinicView, doctorLine } from '@/lib/clinicView'
 import { getActiveServices } from '@/lib/queries'
 import { buildMetadata, JsonLd, breadcrumbSchema } from '@/lib/seo'
 import { ServiceCard } from '@/components/home/ServicesGrid'
@@ -54,8 +54,8 @@ export default async function ServicesPage() {
 
       <PageHeader
         eyebrow="Treatments"
-        title={`Physiotherapy treatments in ${site.address.city}`}
-        description={`${services.length} treatments led by ${site.doctor.name}, ${site.doctor.credentials}. Every one starts with a proper assessment — we find the cause before treating the symptom.`}
+        title={`Physiotherapy treatments${site.address.city ? ` in ${site.address.city}` : ''}`}
+        description={`${services.length} ${services.length === 1 ? 'treatment' : 'treatments'} led by ${doctorLine(site)}. Every one starts with a proper assessment — we find the cause before treating the symptom.`}
         breadcrumb={[{ name: 'Services' }]}
       />
 

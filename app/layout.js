@@ -1,8 +1,13 @@
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import { platform } from '@/config/platform'
+import { getCurrentClinic } from '@/lib/tenant'
+import { clinicView } from '@/lib/clinicView'
+import { brandStyle } from '@/lib/brand'
+import { Suspense } from 'react'
 import StoreProvider from '@/store/StoreProvider'
 import Toaster from '@/components/ui/Toaster'
+import RouteProgress from '@/components/ui/RouteProgress'
 
 /**
  * ============================================================================
@@ -130,9 +135,36 @@ export const viewport = {
   ],
 }
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  /**
+   * THE CLINIC'S COLOUR, ON EVERY PAGE OF THEIR ADDRESS
+   * ---------------------------------------------------
+   * This used to be set only by app/(public)/layout.js, so a clinic's website
+   * was in their colour while their own admin panel, their patients' dashboard,
+   * the login page and the video room were all in Kokli's teal. Their patients
+   * clicked "My appointments" and appeared to have left for another company.
+   *
+   * Setting it here, on <html>, covers every route group at once — and also
+   * the toasts and dropdowns that render at the end of <body>, outside any
+   * page's wrapper.
+   *
+   * On kokli.in there is no clinic, nothing is set, and the defaults in
+   * app/globals.css (Kokli's own teal) apply. getCurrentClinic() is cached for
+   * the request, so the pages below that ask again cost nothing.
+   */
+  const clinic = await getCurrentClinic()
+
   return (
-    <html lang="en-IN" className={`${inter.variable} ${jakarta.variable}`} suppressHydrationWarning>
+    <html
+      lang="en-IN"
+      className={`${inter.variable} ${jakarta.variable}`}
+      style={clinic ? brandStyle(clinicView(clinic).brandColour) : undefined}
+      // globals.css sets smooth scrolling on <html> for anchor links. This tells
+      // Next.js so it can switch it off during page changes — otherwise every
+      // navigation visibly glides to the top, and Next warns on every page.
+      data-scroll-behavior="smooth"
+      suppressHydrationWarning
+    >
       <head>
         {/*
           THE ANTI-FLASH SCRIPT
@@ -188,6 +220,14 @@ export default function RootLayout({ children }) {
         {/* Redux wraps everything so any client component can reach the store.
             Server Components passed as children still render on the server —
             see the explanation in store/StoreProvider.js. */}
+        {/* The thin line across the top during a page change. In its own
+            Suspense boundary because it reads the query string, and Next
+            requires that of any client component which does — without it every
+            page that could be static would be forced to render on demand. */}
+        <Suspense fallback={null}>
+          <RouteProgress />
+        </Suspense>
+
         <StoreProvider>
           {children}
           <Toaster />

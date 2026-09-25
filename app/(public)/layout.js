@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getCurrentClinic } from '@/lib/tenant'
 import { clinicView } from '@/lib/clinicView'
-import { brandRamp, readableTextOn } from '@/lib/brand'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import ClinicStatusBanner from '@/components/layout/ClinicStatusBanner'
@@ -59,33 +58,12 @@ export default async function PublicLayout({ children }) {
 
   return (
     /**
-     * The clinic's colour, as a full palette.
-     *
-     * brandRamp() turns their one hex into the eleven --color-brand-* shades
-     * Tailwind's utilities read. Setting them here overrides the defaults from
-     * @theme for everything inside this wrapper, so `bg-brand-600`,
-     * `text-brand-700`, the focus ring and the header gradient all follow the
-     * clinic — without generating a stylesheet per tenant.
-     *
-     * The shades are computed rather than written in CSS because color-mix()
-     * with a var() does not survive the build. See lib/brand.js.
+     * No colour set here any more. The clinic's palette is put on <html> by
+     * app/layout.js, so the admin panel, the patient dashboard and the login
+     * page share it with this website instead of falling back to Kokli's teal.
+     * See brandStyle() in lib/brand.js.
      */
-    <div
-      className="flex min-h-screen flex-col"
-      style={{
-        '--clinic-brand': site.brandColour,
-        ...brandRamp(site.brandColour),
-        /**
-         * Black or white, whichever can actually be read on their colour.
-         *
-         * Every primary button puts text on the brand colour. That is safe for a
-         * teal and unreadable on a bright yellow — and a clinic that picks yellow
-         * gets buttons nobody can read, which looks like our bug rather than
-         * their choice.
-         */
-        '--color-brand-fg': readableTextOn(site.brandColour),
-      }}
-    >
+    <div className="flex min-h-screen flex-col">
       {/* Shown to staff only — a trial countdown, or a warning that payments are
           not connected yet. Patients never see it. */}
       <ClinicStatusBanner clinic={clinic} />

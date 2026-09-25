@@ -112,7 +112,13 @@ export async function POST(request) {
           JSON.stringify(defaults.openingHours ?? []),
           JSON.stringify(defaults.openingHoursSpec ?? []),
           JSON.stringify(defaultFaqs ?? []),
-          JSON.stringify(defaults.stats ?? []),
+          // NOT the demo figures. config/site.js carries "3,200+ sessions",
+          // "4.9 average rating" and "9+ years" for the demo clinic, and copying
+          // them made every brand-new clinic's homepage claim all three on day
+          // one — with no patients and no reviews. A made-up rating is also the
+          // kind of thing Google penalises. A new clinic starts with none and
+          // the homepage simply leaves the bar out.
+          JSON.stringify([]),
         ]
       )
       const clinicId = clinicRes.insertId
