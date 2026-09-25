@@ -113,7 +113,10 @@
   --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 12px rgb(15 23 42 / 0.04);
   --shadow-lift: 0 2px 4px rgb(15 23 42 / 0.04), 0 12px 28px -6px rgb(15 23 42 / 0.10);
   --shadow-float: 0 4px 8px rgb(15 23 42 / 0.04), 0 24px 48px -12px rgb(15 23 42 / 0.16);
-  --shadow-brand: 0 8px 24px -6px rgb(13 148 136 / 0.45);
+  /* The glow under primary buttons. It used to be teal written out as numbers,
+     so on every clinic's site the button was theirs and the glow on hover was
+     ours. The channels come from brandRamp() per clinic (defaults above). */
+  --shadow-brand: 0 8px 24px -6px rgb(var(--brand-rgb-600) / 0.45);
 
   /* ----------------------------------------------------------- animations */
   --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -197,6 +200,58 @@
     color: var(--color-ink-900);
   }
   .dark h1, .dark h2, .dark h3, .dark h4 { color: var(--color-ink-50); }
+
+  /* THE POINTING HAND, ON EVERYTHING THAT CAN BE PRESSED
+     Tailwind v4 dropped `cursor: pointer` from buttons — its preflight now
+     leaves them on the browser's arrow — so every button in the app, from
+     "Book appointment" to the time slots, felt like plain text under the mouse.
+     One rule here instead of `cursor-pointer` on hundreds of elements, and one
+     nobody can forget on the next button they write.
+
+     Labels are included only when they wrap or point at a checkbox or radio:
+     clicking those toggles the input, so they are controls too. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='option'],
+  [role='menuitem'],
+  [role='switch'],
+  select:not(:disabled),
+  summary,
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='file']:not(:disabled),
+  input[type='range']:not(:disabled),
+  input[type='color']:not(:disabled),
+  input[type='submit']:not(:disabled),
+  input[type='button']:not(:disabled),
+  label:has(> input[type='checkbox']:not(:disabled)),
+  label:has(> input[type='radio']:not(:disabled)),
+  label:has(input[type='checkbox'].sr-only, input[type='radio'].sr-only) {
+    cursor: pointer;
+  }
+
+  /* GRID COLUMNS MAY SHRINK TO THE SCREEN
+     A grid item's default is `min-width: auto` — "never narrower than my
+     content". So one wide thing inside a column (the booking date strip, a
+     table, a long email address) silently widened the COLUMN, and on a phone
+     the booking page became 2,400px wide, cut off on the right. The strip was
+     already built to scroll sideways on its own; the column just never let it.
+     `min-width: 0` lets every grid column be as narrow as the screen and leaves
+     wide content to wrap or scroll inside it. A utility such as min-w-[4.5rem]
+     still wins, since utilities sit in a later layer than this. */
+  .grid > * {
+    min-width: 0;
+  }
+
+  /* And the opposite signal for a control that is switched off, so a greyed-out
+     "Continue" says why nothing happens instead of looking broken. */
+  button:disabled,
+  [aria-disabled='true'],
+  select:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
 
   /* A visible focus ring for keyboard users, on every interactive element.
      Never remove this without replacing it — it is what lets someone who

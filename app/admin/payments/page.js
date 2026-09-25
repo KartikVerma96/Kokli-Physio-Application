@@ -100,7 +100,7 @@ export default async function AdminPaymentsPage({ searchParams }) {
       )}
 
       {/* ------------------------------------------------------------- stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat
           label="This month"
           value={formatMoney(Number(stats.revenue.month_paise) || 0)}
@@ -146,8 +146,8 @@ export default async function AdminPaymentsPage({ searchParams }) {
             aria-current={status === filter.value ? 'true' : undefined}
             className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
               status === filter.value
-                ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900'
-                : 'bg-white text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-ink-700'
+                ? 'bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-sm'
+                : 'bg-white text-ink-600 hover:bg-brand-50 hover:text-brand-700 dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-brand-500/15 dark:hover:text-brand-200'
             }`}
           >
             {filter.label}
@@ -164,7 +164,49 @@ export default async function AdminPaymentsPage({ searchParams }) {
             description="Payments appear here as soon as patients start booking."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* PHONES: a card per payment — amount and status first, because
+              "did it go through?" is the question a patient rings with. */}
+          <ul className="divide-y divide-ink-100 md:hidden dark:divide-ink-800">
+            {payments.map((payment) => (
+              <li key={payment.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{payment.patient_name}</p>
+                    <p className="truncate text-xs text-ink-500">
+                      {payment.service_name} · <span className="font-mono">{payment.appointment_code}</span>
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-semibold tabular-nums">{formatMoney(payment.amount_paise)}</p>
+                    {Number(payment.refunded_paise) > 0 && (
+                      <p className="text-xs text-sky-600">−{formatMoney(payment.refunded_paise)}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+                  <Badge tone={STATUS_TONES[payment.status] || 'neutral'}>
+                    {payment.status === 'created' ? 'not completed' : payment.status}
+                  </Badge>
+                  <span>
+                    {formatDateShort(payment.created_at)},{' '}
+                    {new Date(payment.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {payment.method && <span className="uppercase">{payment.method}</span>}
+                </div>
+                {payment.error_description && (
+                  <p className="mt-1.5 text-[11px] text-red-600">{payment.error_description}</p>
+                )}
+                {(payment.razorpay_payment_id || payment.razorpay_order_id) && (
+                  <p className="mt-1 break-all font-mono text-[10px] text-ink-400">
+                    {payment.razorpay_payment_id || payment.razorpay_order_id}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[54rem] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50/60 text-left dark:border-ink-800 dark:bg-ink-800/40">
                 <tr>
@@ -181,11 +223,11 @@ export default async function AdminPaymentsPage({ searchParams }) {
                 {payments.map((payment) => (
                   <tr
                     key={payment.id}
-                    className="transition-colors hover:bg-ink-50/60 dark:hover:bg-ink-800/40"
+                    className="transition-colors hover:bg-brand-50/60 dark:hover:bg-brand-500/5"
                   >
                     <Td>
-                      <p className="font-medium">{formatDateShort(payment.created_at)}</p>
-                      <p className="text-xs text-ink-500">
+                      <p className="whitespace-nowrap font-medium">{formatDateShort(payment.created_at)}</p>
+                      <p className="whitespace-nowrap text-xs text-ink-500">
                         {new Date(payment.created_at).toLocaleTimeString('en-IN', {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -247,6 +289,7 @@ export default async function AdminPaymentsPage({ searchParams }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
 

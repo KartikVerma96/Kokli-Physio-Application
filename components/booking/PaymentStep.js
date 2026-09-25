@@ -37,6 +37,7 @@ import {
 import { selectBooking, setPatientPackage } from '@/store/slices/bookingSlice'
 import { toast } from '@/lib/toast'
 import { formatMoney, formatDateLong, formatTime } from '@/lib/utils'
+import { doctorLine, shortAddress } from '@/lib/clinicView'
 import Button from '@/components/ui/Button'
 
 export default function PaymentStep({ site, user, packages = [], onStartPayment, onPaid }) {
@@ -178,7 +179,9 @@ export default function PaymentStep({ site, user, packages = [], onStartPayment,
       // matters a great deal on a phone.
       prefill: data.prefill,
       notes: { appointment_code: data.appointment.code },
-      theme: { color: '#0d9488' },
+      // The CLINIC's colour — the patient is paying the clinic, and a checkout in
+      // somebody else's teal looks like a different company taking the money.
+      theme: { color: site.brandColour },
 
       // Step 3: Razorpay calls this with the signature on success.
       handler: (response) => {
@@ -276,10 +279,10 @@ export default function PaymentStep({ site, user, packages = [], onStartPayment,
             value={
               mode === 'online'
                 ? 'Online video consultation'
-                : `${site.address.line1}, ${site.address.city}`
+                : shortAddress(site)
             }
           />
-          <Row label="Physiotherapist" value={`${site.doctor.name}, ${site.doctor.credentials}`} />
+          <Row label="Physiotherapist" value={doctorLine(site)} />
           {booking.painLevel !== '' && (
             <Row label="Current pain" value={`${booking.painLevel} / 10`} />
           )}
@@ -309,8 +312,8 @@ export default function PaymentStep({ site, user, packages = [], onStartPayment,
                 aria-pressed={!booking.patientPackageId}
                 className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
                   !booking.patientPackageId
-                    ? 'border-ink-900 bg-ink-50 dark:border-white dark:bg-ink-800/60'
-                    : 'border-ink-200 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800/60'
+                    ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:border-brand-400 dark:bg-brand-500/10 dark:ring-brand-400'
+                    : 'border-ink-200 hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10'
                 }`}
               >
                 <CreditCard className="mt-0.5 size-4 shrink-0 text-ink-400" aria-hidden="true" />
@@ -500,7 +503,7 @@ function PackageChoice({ pkg, checked, onSelect }) {
       className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
         checked
           ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/50'
-          : 'border-ink-200 hover:bg-ink-50 dark:border-ink-700 dark:hover:bg-ink-800/60'
+          : 'border-ink-200 hover:bg-brand-50/70 dark:border-ink-700 dark:hover:bg-brand-500/10'
       }`}
     >
       <Layers

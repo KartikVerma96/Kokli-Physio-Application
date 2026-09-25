@@ -280,59 +280,64 @@ export default function NotesForm({ appointmentId, notes, patientPainAtBooking }
               key={index}
               className="rounded-2xl border border-ink-200 p-4 dark:border-ink-700"
             >
-              <div className="flex items-start gap-3">
-                <span
-                  className="mt-1 grid size-7 shrink-0 place-items-center rounded-lg bg-ink-100 text-xs font-bold dark:bg-ink-800"
-                  aria-hidden="true"
-                >
-                  {index + 1}
-                </span>
+              {/* Number, name and delete share the first line; everything else
+                  runs the full width of the card underneath. With the number and
+                  the bin as side columns the fields were ~190px on a phone. */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="grid size-7 shrink-0 place-items-center rounded-lg bg-ink-100 text-xs font-bold dark:bg-ink-800"
+                    aria-hidden="true"
+                  >
+                    {index + 1}
+                  </span>
 
-                <div className="min-w-0 flex-1 space-y-3">
                   <input
                     value={exercise.name}
                     onChange={(event) => updateExercise(index, 'name', event.target.value)}
                     placeholder="Exercise name — e.g. Glute bridge"
-                    className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+                    className="min-w-0 flex-1 rounded-xl border border-ink-200 bg-white px-3.5 py-2 text-sm font-semibold focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
                   />
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      value={exercise.sets || ''}
-                      onChange={(event) => updateExercise(index, 'sets', event.target.value)}
-                      placeholder="Sets"
-                      className="rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-                    />
-                    <input
-                      value={exercise.reps || ''}
-                      onChange={(event) => updateExercise(index, 'reps', event.target.value)}
-                      placeholder="Reps / hold"
-                      className="rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-                    />
-                    <input
-                      value={exercise.frequency || ''}
-                      onChange={(event) => updateExercise(index, 'frequency', event.target.value)}
-                      placeholder="How often"
-                      className="rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeExercise(index)}
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                    aria-label={`Remove exercise ${index + 1}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
 
+                {/* Two across on a phone, three from sm up: three in a row left
+                    each box too narrow to read "Reps / hold". */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <input
-                    value={exercise.notes || ''}
-                    onChange={(event) => updateExercise(index, 'notes', event.target.value)}
-                    placeholder="Cue or caution — e.g. keep the pelvis level, stop if sharp pain"
-                    className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+                    value={exercise.sets || ''}
+                    onChange={(event) => updateExercise(index, 'sets', event.target.value)}
+                    placeholder="Sets"
+                    className="rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+                  />
+                  <input
+                    value={exercise.reps || ''}
+                    onChange={(event) => updateExercise(index, 'reps', event.target.value)}
+                    placeholder="Reps / hold"
+                    className="rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+                  />
+                  <input
+                    value={exercise.frequency || ''}
+                    onChange={(event) => updateExercise(index, 'frequency', event.target.value)}
+                    placeholder="How often"
+                    className="col-span-2 rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none sm:col-span-1 dark:border-ink-700 dark:bg-ink-900"
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => removeExercise(index)}
-                  className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                  aria-label={`Remove exercise ${index + 1}`}
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                <input
+                  value={exercise.notes || ''}
+                  onChange={(event) => updateExercise(index, 'notes', event.target.value)}
+                  placeholder="Cue or caution — e.g. keep the pelvis level, stop if sharp pain"
+                  className="w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-ink-700 dark:bg-ink-900"
+                />
               </div>
             </div>
           ))}

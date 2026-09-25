@@ -1,3 +1,4 @@
+import { cloneElement, isValidElement } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -84,35 +85,96 @@ export function Badge({ children, tone = 'neutral', className, dot = false }) {
 /*  STAT TILE                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * ----------------------------------------------------------------------------
+ *  THE TILE, AND ITS TWO COPIES OF THE ICON
+ * ----------------------------------------------------------------------------
+ *  Each tone paints three things: a faint tinted wash across the card, a solid
+ *  chip behind the icon, and an oversized ghost of the same icon bleeding out of
+ *  the top-right corner. The ghost is what gives the tile its character — it
+ *  reads as a watermark rather than a second icon, so the number stays the thing
+ *  you see first.
+ *
+ *  `brand` uses the clinic's own colour (see brandStyle in lib/brand.js), so an
+ *  admin panel is tinted in the clinic's colour rather than ours. The other
+ *  tones are fixed, because "money in" being green and "overdue" being red is
+ *  meaning, not decoration.
+ */
+const STAT_TONES = {
+  brand: {
+    wash: 'from-brand-50/90 dark:from-brand-500/10',
+    chip: 'bg-brand-500/15 text-brand-600 dark:text-brand-300',
+    ghost: 'text-brand-500/10 dark:text-brand-400/10',
+  },
+  success: {
+    wash: 'from-emerald-50/90 dark:from-emerald-500/10',
+    chip: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300',
+    ghost: 'text-emerald-500/10 dark:text-emerald-400/10',
+  },
+  warning: {
+    wash: 'from-amber-50/90 dark:from-amber-500/10',
+    chip: 'bg-amber-500/15 text-amber-600 dark:text-amber-300',
+    ghost: 'text-amber-500/10 dark:text-amber-400/10',
+  },
+  info: {
+    wash: 'from-sky-50/90 dark:from-sky-500/10',
+    chip: 'bg-sky-500/15 text-sky-600 dark:text-sky-300',
+    ghost: 'text-sky-500/10 dark:text-sky-400/10',
+  },
+  danger: {
+    wash: 'from-red-50/90 dark:from-red-500/10',
+    chip: 'bg-red-500/15 text-red-600 dark:text-red-300',
+    ghost: 'text-red-500/10 dark:text-red-400/10',
+  },
+  // For a fact with no good or bad about it — "sending from: our number". It
+  // was being passed already and silently fell back to the brand colour, which
+  // made a neutral statement look like the headline number on the page.
+  neutral: {
+    wash: 'from-ink-100/70 dark:from-ink-500/10',
+    chip: 'bg-ink-500/15 text-ink-600 dark:text-ink-300',
+    ghost: 'text-ink-500/10 dark:text-ink-400/10',
+  },
+}
+
 export function Stat({ label, value, hint, icon, tone = 'brand', className }) {
-  const toneRing = {
-    brand: 'bg-brand-50 text-brand-600 dark:bg-brand-950/50 dark:text-brand-300',
-    success: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300',
-    warning: 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300',
-    info: 'bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300',
-    danger: 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300',
-  }[tone]
+  const t = STAT_TONES[tone] || STAT_TONES.brand
+
+  /**
+   * The same icon element, resized for the watermark.
+   *
+   * Callers pass a ready-made element (`icon={<Users className="size-5" />}`),
+   * and cloning it with a new className is how the tile gets a second, much
+   * larger copy without every caller having to pass the icon twice.
+   */
+  const ghost =
+    isValidElement(icon) && cloneElement(icon, { className: 'size-24 sm:size-28', strokeWidth: 1.25 })
 
   return (
-    <div className={cn('card p-5', className)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink-500 dark:text-ink-400">
-            {label}
-          </p>
-          {/* tabular-nums keeps digits the same width, so a column of numbers
-              lines up and does not jitter when a value changes. */}
-          <p className="mt-2 text-3xl font-bold tabular-nums text-ink-900 dark:text-white">
-            {value}
-          </p>
-          {hint && <p className="mt-1 text-xs text-ink-500 dark:text-ink-400">{hint}</p>}
+    // overflow-hidden keeps the oversized ghost inside the rounded corners;
+    // the wash is a background IMAGE, so .card's own background colour still
+    // provides the surface underneath it in both themes.
+    <div className={cn('card relative overflow-hidden bg-linear-to-br to-transparent p-4 sm:p-5', t.wash, className)}>
+      {ghost && (
+        <div className={cn('pointer-events-none absolute -right-4 -top-5', t.ghost)} aria-hidden="true">
+          {ghost}
         </div>
-        {icon && (
-          <div className={cn('grid size-11 shrink-0 place-items-center rounded-2xl', toneRing)}>
-            {icon}
-          </div>
-        )}
-      </div>
+      )}
+
+      {icon && (
+        <div className={cn('relative grid size-10 place-items-center rounded-xl sm:size-11 sm:rounded-2xl', t.chip)}>
+          {icon}
+        </div>
+      )}
+
+      {/* tabular-nums keeps digits the same width, so a column of numbers
+          lines up and does not jitter when a value changes. */}
+      <p className="relative mt-3 text-2xl font-bold tabular-nums text-ink-900 sm:text-3xl dark:text-white">
+        {value}
+      </p>
+      <p className="relative mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-ink-500 sm:text-xs dark:text-ink-400">
+        {label}
+      </p>
+      {hint && <p className="relative mt-1.5 text-xs text-ink-500 dark:text-ink-400">{hint}</p>}
     </div>
   )
 }

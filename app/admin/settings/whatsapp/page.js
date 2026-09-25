@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { MessageCircle, Info, TriangleAlert } from 'lucide-react'
+import { MessageCircle, Info, TriangleAlert, UserCheck, Smartphone } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { requireCurrentClinic } from '@/lib/tenant'
 import { whatsappAllowance, isWhatsAppConfigured, usesOwnNumber } from '@/lib/whatsapp'
@@ -96,7 +96,7 @@ export default async function WhatsAppPage() {
       )}
 
       {allowance.enabled && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           <Stat
             label="Sent this month"
             value={allowance.used}
@@ -108,11 +108,13 @@ export default async function WhatsAppPage() {
             label="Can be marketed to"
             value={`${consented[0].n} of ${patients[0].n}`}
             hint="patients who agreed"
+            icon={<UserCheck className="size-5" />}
             tone="info"
           />
           <Stat
             label="Sending from"
             value={own ? 'Your number' : 'Our number'}
+            icon={<Smartphone className="size-5" />}
             hint={
               isWhatsAppConfigured(clinic)
                 ? own

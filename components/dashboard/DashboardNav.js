@@ -167,9 +167,12 @@ export default function DashboardNav({ items, variant = 'sidebar', maxTabs = 5 }
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                // The current page in solid clinic colour. A pale tint was used
+                // before, which in dark mode was near-black and the same as the
+                // hover — so the sidebar never showed whose clinic this was.
                 active
-                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300'
-                  : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-300 dark:hover:bg-ink-800 dark:hover:text-white'
+                  ? 'bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-sm'
+                  : 'text-ink-600 hover:bg-brand-50 hover:text-brand-700 dark:text-ink-300 dark:hover:bg-brand-500/10 dark:hover:text-brand-200'
               )}
             >
               <ItemIcon className="size-4.5 shrink-0" aria-hidden="true" />
@@ -184,8 +187,11 @@ export default function DashboardNav({ items, variant = 'sidebar', maxTabs = 5 }
 
 /** "My appointments" does not fit under a tab icon on a 360px screen. */
 function shortLabel(label) {
-  return label
+  const short = label
     .replace('My ', '')
     .replace('Profile & history', 'Profile')
     .replace(' & ', ' ')
+  // "My appointments" loses its first word and would read "appointments" beside
+  // "Overview" and "Profile".
+  return short.charAt(0).toUpperCase() + short.slice(1)
 }

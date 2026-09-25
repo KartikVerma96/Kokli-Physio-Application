@@ -60,7 +60,7 @@ import {
   ClipboardList, ShieldCheck, RefreshCw,
 } from 'lucide-react'
 import { toast } from '@/lib/toast'
-import { cn, formatTime, formatDateLong, firstName } from '@/lib/utils'
+import { cn, formatTime, formatDateLong, formatDateShort, firstName } from '@/lib/utils'
 import { painColour } from '@/components/ui/Field'
 import Button from '@/components/ui/Button'
 
@@ -664,7 +664,10 @@ export default function VideoRoom({ site, token, iceServers, hasTurn, self, appo
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">{appointment.serviceName}</p>
             <p className="truncate text-xs text-white/50">
-              {formatDateLong(appointment.date)} · {formatTime(appointment.startTime)} ·{' '}
+              {/* The short date on a phone, so the booking code still fits. */}
+              <span className="sm:hidden">{formatDateShort(appointment.date)}</span>
+              <span className="hidden sm:inline">{formatDateLong(appointment.date)}</span>
+              {' · '}{formatTime(appointment.startTime)} ·{' '}
               <span className="font-mono">{appointment.code}</span>
             </p>
           </div>
@@ -703,6 +706,7 @@ export default function VideoRoom({ site, token, iceServers, hasTurn, self, appo
               errorMessage={errorMessage}
               otherPersonName={otherPersonName}
               isPhysio={isPhysio}
+              clinicPhone={site?.contact?.phone}
               onReconnect={reconnect}
             />
           )}
@@ -819,13 +823,15 @@ export default function VideoRoom({ site, token, iceServers, hasTurn, self, appo
 /* ========================================================================== */
 
 function StatusPill({ phase, elapsed }) {
+  // `short` is what a phone shows. At 320px "Waiting for the other person" took
+  // the whole header and squeezed the treatment name down to "K…".
   const labels = {
-    'requesting-media': { text: 'Starting camera', tone: 'bg-white/10', icon: Loader2, spin: true },
+    'requesting-media': { text: 'Starting camera', short: 'Camera', tone: 'bg-white/10', icon: Loader2, spin: true },
     connecting: { text: 'Connecting', tone: 'bg-amber-500/20 text-amber-200', icon: Loader2, spin: true },
-    waiting: { text: 'Waiting for the other person', tone: 'bg-white/10', icon: Loader2, spin: true },
+    waiting: { text: 'Waiting for the other person', short: 'Waiting', tone: 'bg-white/10', icon: Loader2, spin: true },
     connected: { text: formatElapsed(elapsed), tone: 'bg-emerald-500/20 text-emerald-200', icon: null },
     reconnecting: { text: 'Reconnecting', tone: 'bg-amber-500/20 text-amber-200', icon: WifiOff },
-    error: { text: 'Connection problem', tone: 'bg-red-500/20 text-red-200', icon: AlertCircle },
+    error: { text: 'Connection problem', short: 'Problem', tone: 'bg-red-500/20 text-red-200', icon: AlertCircle },
   }
   const state = labels[phase] || labels.connecting
 
@@ -841,12 +847,19 @@ function StatusPill({ phase, elapsed }) {
       ) : (
         <span className="size-2 rounded-full bg-emerald-400" aria-hidden="true" />
       )}
-      {state.text}
+      {state.short ? (
+        <>
+          <span className="sm:hidden">{state.short}</span>
+          <span className="hidden sm:inline">{state.text}</span>
+        </>
+      ) : (
+        state.text
+      )}
     </span>
   )
 }
 
-function Overlay({ phase, errorMessage, otherPersonName, isPhysio, onReconnect }) {
+function Overlay({ phase, errorMessage, otherPersonName, isPhysio, clinicPhone, onReconnect }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-ink-900/95 p-6 text-center backdrop-blur-sm">
       <div className="max-w-md">
@@ -862,13 +875,18 @@ function Overlay({ phase, errorMessage, otherPersonName, isPhysio, onReconnect }
                 <RefreshCw className="size-4" aria-hidden="true" />
                 Try again
               </Button>
-              <Button
-                href={`tel:${site.contact.phone.replace(/\s/g, '')}`}
-                variant="secondary"
-                size="sm"
-              >
-                Call the clinic instead
-              </Button>
+              {/* Passed in rather than read from `site`, which only exists in the
+                  parent — reading it here crashed the error screen itself, at the
+                  exact moment a patient needed the way out. */}
+              {clinicPhone && (
+                <Button
+                  href={`tel:${clinicPhone.replace(/\s/g, '')}`}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Call the clinic instead
+                </Button>
+              )}
             </div>
           </>
         ) : (

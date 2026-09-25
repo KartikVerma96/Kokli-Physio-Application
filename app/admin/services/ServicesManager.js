@@ -75,12 +75,15 @@ export default function ServicesManager({ services }) {
                 !service.is_active && 'opacity-60'
               )}
             >
-              <div className="flex flex-wrap items-start gap-4">
+              {/* On a phone the name takes the whole first line and the price and
+                  buttons drop to a second. With `flex-1` alone the name column
+                  shrank to nothing and the treatment name ran over the price. */}
+              <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-300">
                   <Icon name={service.icon} className="size-5" />
                 </span>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-[calc(100%-3.75rem)] sm:basis-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-bold">{service.name}</h2>
                     {!service.is_active && <Badge tone="neutral">Hidden</Badge>}
@@ -105,16 +108,16 @@ export default function ServicesManager({ services }) {
                   <p className="mt-1.5 font-mono text-[11px] text-ink-400">/services/{service.slug}</p>
                 </div>
 
-                <div className="shrink-0 text-right">
+                <div className="ml-15 shrink-0 sm:ml-0 sm:text-right">
                   <p className="font-display text-lg font-bold">{formatMoney(service.price_paise)}</p>
                   <p className="text-xs text-ink-500">{service.duration_minutes} min</p>
                 </div>
 
-                <div className="flex shrink-0 gap-1">
+                <div className="ml-auto flex shrink-0 gap-1 sm:ml-0">
                   <button
                     type="button"
                     onClick={() => setEditing(editing === service.id ? null : service.id)}
-                    className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+                    className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
                     aria-label={`Edit ${service.name}`}
                     title="Edit"
                   >
@@ -125,7 +128,7 @@ export default function ServicesManager({ services }) {
                     type="button"
                     onClick={() => toggle(service)}
                     disabled={pending}
-                    className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+                    className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
                     aria-label={service.is_active ? `Hide ${service.name}` : `Show ${service.name}`}
                     title={service.is_active ? 'Hide from website' : 'Show on website'}
                   >
@@ -137,7 +140,7 @@ export default function ServicesManager({ services }) {
                       href={`/services/${service.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+                      className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
                       aria-label={`View ${service.name} on the website`}
                       title="View the live page"
                     >

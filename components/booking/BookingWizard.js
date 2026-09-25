@@ -190,11 +190,15 @@ export default function BookingWizard({ site, services, initialDates, user, init
         {/* Hidden on the payment step, which owns its own buttons — a "Continue"
             next to "Pay ₹800" would be genuinely confusing. */}
         {booking.step < 4 && (
-          <div className="mt-8 flex items-center justify-between gap-4 border-t border-ink-200 pt-6 dark:border-ink-800">
+          <div className="mt-8 flex items-center justify-between gap-3 border-t border-ink-200 pt-6 sm:gap-4 dark:border-ink-800">
+            {/* Back is the secondary action, so it is the one that gives way on a
+                small phone: medium size, and below 360px just the arrow (the word
+                stays for screen readers). At full size the pair was 21px wider
+                than a 320px screen and "Review & pay" ran off the edge. */}
             {booking.step > 1 ? (
-              <Button variant="ghost" size="lg" onClick={handleBack}>
+              <Button variant="ghost" size="md" onClick={handleBack}>
                 <ArrowLeft className="size-4" aria-hidden="true" />
-                Back
+                <span className="max-[359px]:sr-only">Back</span>
               </Button>
             ) : (
               <span />
@@ -263,15 +267,15 @@ function ProgressSteps({ current, onStepClick }) {
                 aria-current={isCurrent ? 'step' : undefined}
                 className={cn(
                   'flex min-w-0 items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors',
-                  isComplete && 'cursor-pointer hover:bg-ink-100 dark:hover:bg-ink-800',
+                  isComplete && 'cursor-pointer hover:bg-brand-50 dark:hover:bg-brand-500/10',
                   !isComplete && 'cursor-default'
                 )}
               >
                 <span
                   className={cn(
                     'grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold transition-all',
-                    isComplete && 'bg-brand-600 text-white',
-                    isCurrent && 'bg-brand-600 text-white shadow-brand ring-4 ring-brand-500/20',
+                    isComplete && 'bg-brand-600 text-[var(--color-brand-fg,#fff)]',
+                    isCurrent && 'bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand ring-4 ring-brand-500/20',
                     !isComplete && !isCurrent && 'bg-ink-100 text-ink-400 dark:bg-ink-800 dark:text-ink-500'
                   )}
                 >

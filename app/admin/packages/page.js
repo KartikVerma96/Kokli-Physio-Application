@@ -1,4 +1,4 @@
-import { Layers, Info } from 'lucide-react'
+import { Layers, Info, ShoppingBag, IndianRupee } from 'lucide-react'
 import { requireCurrentClinic } from '@/lib/tenant'
 import { clinicPackages, packageSaving } from '@/lib/packages'
 import { getAllServices } from '@/lib/queries'
@@ -85,7 +85,7 @@ export default async function PackagesPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <Stat
           label="On sale"
           value={active.length}
@@ -93,11 +93,18 @@ export default async function PackagesPage() {
           icon={<Layers className="size-5" />}
           tone="brand"
         />
-        <Stat label="Sold" value={sold} hint="all time" tone="success" />
+        <Stat
+          label="Sold"
+          value={sold}
+          hint="all time"
+          icon={<ShoppingBag className="size-5" />}
+          tone="success"
+        />
         <Stat
           label="Average package"
           value={sold > 0 ? formatMoney(averageValue) : '—'}
           hint="against a single visit"
+          icon={<IndianRupee className="size-5" />}
           tone="info"
         />
       </div>

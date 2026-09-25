@@ -138,7 +138,7 @@ export default async function AdminAppointmentsPage({ searchParams }) {
 
           <button
             type="submit"
-            className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+            className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-[var(--color-brand-fg,#fff)] transition-colors hover:bg-brand-700"
           >
             Search
           </button>
@@ -146,7 +146,7 @@ export default async function AdminAppointmentsPage({ searchParams }) {
           {(search || status || range) && (
             <Link
               href="/admin/appointments"
-              className="h-11 shrink-0 rounded-xl px-4 text-sm font-semibold leading-[2.75rem] text-ink-500 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
+              className="h-11 shrink-0 rounded-xl px-4 text-sm font-semibold leading-[2.75rem] text-ink-500 transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
             >
               Clear
             </Link>
@@ -184,9 +184,50 @@ export default async function AdminAppointmentsPage({ searchParams }) {
             description="Try clearing the filters, or widening the date range."
           />
         ) : (
-          // overflow-x-auto on the wrapper is what stops a wide table breaking the
-          // page layout on a phone. The table scrolls inside its own box.
-          <div className="overflow-x-auto">
+          <>
+          {/* PHONES: one card per appointment instead of the table.
+              Seven columns do not fit 360px. Squeezed, the date broke over five
+              lines; given a minimum width, the table scrolled sideways and hid
+              the status and the actions — the two things reception opens this
+              for. A card shows all of it at once, and the whole card opens the
+              appointment. */}
+          <ul className="divide-y divide-ink-100 md:hidden dark:divide-ink-800">
+            {appointments.map((appointment) => {
+              const meta = statusMeta(appointment.status)
+              return (
+                <li key={appointment.id} className="flex items-start gap-3 p-4">
+                  <Link href={`/admin/appointments/${appointment.id}`} className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">
+                        {formatDateShort(appointment.appointment_date)} ·{' '}
+                        <span className="tabular-nums">{formatTime(appointment.start_time)}</span>
+                      </p>
+                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                    </div>
+                    <p className="mt-1 truncate font-semibold">{appointment.patient_name}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-500">
+                      <Icon name={appointment.service_icon} className="size-3.5 shrink-0 text-brand-600" />
+                      <span className="truncate">
+                        {appointment.service_name} · {appointment.mode === 'online' ? 'Online' : 'Clinic'}
+                      </span>
+                    </p>
+                    <p className="mt-1.5 flex items-center gap-2 text-sm">
+                      <span className="font-semibold tabular-nums">{formatMoney(appointment.amount_paise)}</span>
+                      {appointment.payment_status === 'paid' && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Paid</span>
+                      )}
+                      <span className="font-mono text-[11px] text-ink-400">{appointment.code}</span>
+                    </p>
+                  </Link>
+                  <RowActions appointment={appointment} />
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Tablets and up: the table. overflow-x-auto still guards the widths
+              between md and the full layout, where it scrolls inside its box. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[52rem] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50/60 text-left dark:border-ink-800 dark:bg-ink-800/40">
                 <tr>
@@ -207,7 +248,7 @@ export default async function AdminAppointmentsPage({ searchParams }) {
                   return (
                     <tr
                       key={appointment.id}
-                      className="transition-colors hover:bg-ink-50/60 dark:hover:bg-ink-800/40"
+                      className="transition-colors hover:bg-brand-50/60 dark:hover:bg-brand-500/5"
                     >
                       <Td>
                         <p className="font-semibold">
@@ -268,40 +309,20 @@ export default async function AdminAppointmentsPage({ searchParams }) {
                       </Td>
 
                       <Td className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {appointment.patient_phone && (
-                            <a
-                              href={`tel:${appointment.patient_phone.replace(/\s/g, '')}`}
-                              className="grid size-8 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-700"
-                              aria-label="Call patient"
-                              title={appointment.patient_phone}
-                            >
-                              <Phone className="size-3.5" />
-                            </a>
-                          )}
-                          {isOnline && ['confirmed', 'in_progress'].includes(appointment.status) && (
-                            <Link
-                              href={`/consult/${appointment.id}`}
-                              className="grid size-8 place-items-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-700"
-                              aria-label="Join call"
-                              title="Join video consultation"
-                            >
-                              <Video className="size-3.5" />
-                            </Link>
-                          )}
+                        <RowActions appointment={appointment} className="justify-end">
                           <Link
                             href={`/admin/appointments/${appointment.id}`}
                             className={`grid size-8 place-items-center rounded-lg transition-colors ${
                               appointment.has_notes
                                 ? 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950'
-                                : 'text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-700'
+                                : 'text-ink-400 hover:bg-brand-50 dark:hover:bg-brand-500/15'
                             }`}
                             aria-label="Open appointment"
                             title={appointment.has_notes ? 'Notes written' : 'Write notes'}
                           >
                             <FileText className="size-3.5" />
                           </Link>
-                        </div>
+                        </RowActions>
                       </Td>
                     </tr>
                   )
@@ -309,6 +330,7 @@ export default async function AdminAppointmentsPage({ searchParams }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </div>
@@ -318,6 +340,41 @@ export default async function AdminAppointmentsPage({ searchParams }) {
 /* -------------------------------------------------------------------------- */
 /*  SMALL PIECES                                                              */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Call the patient, and join the video call when one is live.
+ *
+ * Shared by the table row and the phone card so the two can never disagree
+ * about when "Join call" appears. `children` adds row-specific extras.
+ */
+function RowActions({ appointment, className = '', children }) {
+  const canJoin = appointment.mode === 'online' && ['confirmed', 'in_progress'].includes(appointment.status)
+  return (
+    <div className={`flex shrink-0 gap-1 ${className}`}>
+      {appointment.patient_phone && (
+        <a
+          href={`tel:${appointment.patient_phone.replace(/\s/g, '')}`}
+          className="grid size-9 place-items-center rounded-lg text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 md:size-8 dark:hover:text-brand-300 dark:hover:bg-brand-500/15"
+          aria-label="Call patient"
+          title={appointment.patient_phone}
+        >
+          <Phone className="size-3.5" />
+        </a>
+      )}
+      {canJoin && (
+        <Link
+          href={`/consult/${appointment.id}`}
+          className="grid size-9 place-items-center rounded-lg bg-brand-600 text-[var(--color-brand-fg,#fff)] transition-colors hover:bg-brand-700 md:size-8"
+          aria-label="Join call"
+          title="Join video consultation"
+        >
+          <Video className="size-3.5" />
+        </Link>
+      )}
+      {children}
+    </div>
+  )
+}
 
 function FilterRow({ label, options }) {
   return (
@@ -332,8 +389,8 @@ function FilterRow({ label, options }) {
           aria-current={option.active ? 'true' : undefined}
           className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
             option.active
-              ? 'bg-ink-900 text-white dark:bg-white dark:text-ink-900'
-              : 'bg-white text-ink-600 hover:bg-ink-100 dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-ink-700'
+              ? 'bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-sm'
+              : 'bg-white text-ink-600 hover:bg-brand-50 hover:text-brand-700 dark:bg-ink-800 dark:text-ink-300 dark:hover:bg-brand-500/15 dark:hover:text-brand-200'
           }`}
         >
           {option.label}

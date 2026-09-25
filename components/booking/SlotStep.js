@@ -80,19 +80,19 @@ export default function SlotStep({ site, dates }) {
               aria-pressed={isSelected}
               className={cn(
                 'flex min-w-[4.5rem] shrink-0 snap-start flex-col items-center gap-0.5 rounded-2xl border-2 px-3 py-3 transition-all',
-                isSelected && 'border-brand-500 bg-brand-600 text-white shadow-brand',
+                isSelected && 'border-brand-500 bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand',
                 !isSelected && day.isOpen &&
                   'border-ink-200 hover:border-brand-300 hover:bg-brand-50/50 dark:border-ink-700 dark:hover:bg-brand-950/30',
                 !day.isOpen && 'cursor-not-allowed border-ink-100 opacity-40 dark:border-ink-800'
               )}
             >
-              <span className={cn('text-[10px] font-bold uppercase tracking-wider', isSelected ? 'text-brand-100' : 'text-ink-400')}>
+              <span className={cn('text-[10px] font-bold uppercase tracking-wider', isSelected ? 'text-[var(--color-brand-fg,#fff)] opacity-75' : 'text-ink-400')}>
                 {weekdayLabel(day.date)}
               </span>
               <span className="text-lg font-bold tabular-nums leading-tight">
                 {Number(day.date.slice(8, 10))}
               </span>
-              <span className={cn('text-[10px] font-medium', isSelected ? 'text-brand-100' : 'text-ink-400')}>
+              <span className={cn('text-[10px] font-medium', isSelected ? 'text-[var(--color-brand-fg,#fff)] opacity-75' : 'text-ink-400')}>
                 {day.isToday ? 'Today' : monthLabel(day.date)}
               </span>
             </button>
@@ -124,7 +124,13 @@ export default function SlotStep({ site, dates }) {
           // day" rather than leaving the patient guessing.
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-ink-300 py-14 text-center dark:border-ink-700">
             <CalendarX2 className="size-8 text-ink-300" aria-hidden="true" />
-            <p className="mt-3 font-semibold">No slots on {formatDateRelative(date)}</p>
+            {/* "No slots today", not "No slots on Today": the relative words
+                read as adverbs, only a real date takes "on". */}
+            <p className="mt-3 font-semibold">
+              {['Today', 'Tomorrow'].includes(formatDateRelative(date))
+                ? `No slots ${formatDateRelative(date).toLowerCase()}`
+                : `No slots on ${formatDateRelative(date)}`}
+            </p>
             <p className="mt-1 max-w-xs text-sm text-ink-500 dark:text-ink-400">
               {slotsError || 'Try another date from the strip above.'}
             </p>
@@ -156,7 +162,7 @@ export default function SlotStep({ site, dates }) {
                           className={cn(
                             'rounded-xl border-2 px-2 py-2.5 text-sm font-semibold tabular-nums transition-all',
                             isSelected
-                              ? 'border-brand-500 bg-brand-600 text-white shadow-brand'
+                              ? 'border-brand-500 bg-brand-600 text-[var(--color-brand-fg,#fff)] shadow-brand'
                               : 'border-ink-200 hover:-translate-y-0.5 hover:border-brand-400 hover:text-brand-700 dark:border-ink-700 dark:hover:border-brand-600 dark:hover:text-brand-300'
                           )}
                         >

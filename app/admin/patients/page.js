@@ -62,14 +62,14 @@ export default async function AdminPatientsPage({ searchParams }) {
           </div>
           <button
             type="submit"
-            className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+            className="h-11 shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-semibold text-[var(--color-brand-fg,#fff)] transition-colors hover:bg-brand-700"
           >
             Search
           </button>
           {search && (
             <Link
               href="/admin/patients"
-              className="h-11 shrink-0 rounded-xl px-4 text-sm font-semibold leading-[2.75rem] text-ink-500 transition-colors hover:bg-ink-100 dark:hover:bg-ink-800"
+              className="h-11 shrink-0 rounded-xl px-4 text-sm font-semibold leading-[2.75rem] text-ink-500 transition-colors hover:bg-brand-50 dark:hover:bg-brand-500/10"
             >
               Clear
             </Link>
@@ -89,7 +89,52 @@ export default async function AdminPatientsPage({ searchParams }) {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* PHONES: a card per patient — who, how to reach them, how often they
+              come. The six-column table only fits from tablet width up. */}
+          <ul className="divide-y divide-ink-100 md:hidden dark:divide-ink-800">
+            {patients.map((patient) => {
+              const age = ageFrom(patient.date_of_birth)
+              return (
+                <li key={patient.id} className="flex items-center gap-3 p-4">
+                  <Link href={`/admin/patients/${patient.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    {patient.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={patient.image} alt="" className="size-10 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-100 text-xs font-bold text-brand-700 dark:bg-brand-500/20 dark:text-brand-200">
+                        {initials(patient.name)}
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold">{patient.name}</span>
+                      <span className="block truncate text-xs text-ink-500">
+                        {[age && `${age} yrs`, patient.city].filter(Boolean).join(' · ') || patient.phone || patient.email}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-ink-500">
+                        {patient.appointment_count} {Number(patient.appointment_count) === 1 ? 'visit' : 'visits'} ·{' '}
+                        {patient.last_visit ? `last ${formatDateShort(patient.last_visit)}` : 'no visit yet'} ·{' '}
+                        <span className="font-semibold text-ink-700 tabular-nums dark:text-ink-200">
+                          {formatMoney(Number(patient.lifetime_paise) || 0)}
+                        </span>
+                      </span>
+                    </span>
+                  </Link>
+                  {patient.phone && (
+                    <a
+                      href={`tel:${patient.phone.replace(/\s/g, '')}`}
+                      className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-400 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-brand-500/10 dark:hover:text-brand-200"
+                      aria-label={`Call ${patient.name}`}
+                    >
+                      <Phone className="size-4" />
+                    </a>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[48rem] text-sm">
               <thead className="border-b border-ink-100 bg-ink-50/60 text-left dark:border-ink-800 dark:bg-ink-800/40">
                 <tr>
@@ -108,7 +153,7 @@ export default async function AdminPatientsPage({ searchParams }) {
                   return (
                     <tr
                       key={patient.id}
-                      className="transition-colors hover:bg-ink-50/60 dark:hover:bg-ink-800/40"
+                      className="transition-colors hover:bg-brand-50/60 dark:hover:bg-brand-500/5"
                     >
                       <Td>
                         <Link href={`/admin/patients/${patient.id}`} className="flex items-center gap-3 group">
@@ -182,6 +227,7 @@ export default async function AdminPatientsPage({ searchParams }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
     </div>

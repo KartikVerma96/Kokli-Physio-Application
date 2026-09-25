@@ -59,7 +59,9 @@ export default async function AccountPage() {
                 : 'Ask your clinic owner to add it, so you can sign in without a password'
             }
           />
-          <Row label="Role" value={me?.role} />
+          {/* Capitalised here, not with CSS on every row — `capitalize` on the row
+              also turned an email address into "Uiview@Example.Com". */}
+          <Row label="Role" value={me?.role && me.role[0].toUpperCase() + me.role.slice(1)} />
         </dl>
       </Card>
 
@@ -75,7 +77,7 @@ function Row({ label, value, hint }) {
   return (
     <div>
       <dt className="text-xs font-medium uppercase tracking-wider text-ink-500">{label}</dt>
-      <dd className="mt-0.5 font-semibold capitalize">{value || '—'}</dd>
+      <dd className="mt-0.5 break-words font-semibold">{value || '—'}</dd>
       {hint && <p className="mt-0.5 text-xs text-ink-400">{hint}</p>}
     </div>
   )

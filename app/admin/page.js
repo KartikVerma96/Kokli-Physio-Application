@@ -77,7 +77,9 @@ export default async function AdminDashboard() {
               : `${schedule.length} appointment${schedule.length === 1 ? '' : 's'} today`}
           </p>
         </div>
-        <div className="flex gap-2">
+        {/* flex-wrap: on a 320px phone the two buttons are wider than the
+            screen side by side, and the second one was pushed off the edge. */}
+        <div className="flex flex-wrap gap-2">
           <Button href="/admin/appointments" variant="secondary" size="sm">
             All appointments
           </Button>
@@ -110,7 +112,7 @@ export default async function AdminDashboard() {
       )}
 
       {/* ------------------------------------------------------------- stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Stat
           label="Today"
           value={Number(stats.appointments.today_count) || 0}
@@ -324,7 +326,7 @@ function ScheduleRow({ appointment }) {
         {appointment.patient_phone && (
           <a
             href={`tel:${appointment.patient_phone.replace(/\s/g, '')}`}
-            className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+            className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
             aria-label={`Call ${appointment.patient_name}`}
             title={appointment.patient_phone}
           >
@@ -335,7 +337,7 @@ function ScheduleRow({ appointment }) {
         {isOnline && ['confirmed', 'in_progress'].includes(appointment.status) && (
           <Link
             href={`/consult/${appointment.id}`}
-            className="grid size-9 place-items-center rounded-xl bg-brand-600 text-white transition-colors hover:bg-brand-700"
+            className="grid size-9 place-items-center rounded-xl bg-brand-600 text-[var(--color-brand-fg,#fff)] transition-colors hover:bg-brand-700"
             aria-label="Join video consultation"
             title="Join video consultation"
           >
@@ -345,7 +347,7 @@ function ScheduleRow({ appointment }) {
 
         <Link
           href={`/admin/appointments/${appointment.id}`}
-          className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-ink-800"
+          className="grid size-9 place-items-center rounded-xl text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:hover:text-brand-300 dark:hover:bg-brand-500/10"
           aria-label="Open appointment"
           title="Open appointment"
         >

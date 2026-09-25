@@ -21,14 +21,14 @@
  */
 
 import { useDispatch, useSelector } from 'react-redux'
-import { Info, Video, MapPin, Wifi, Shirt, FileText } from 'lucide-react'
+import { Info, Video, MapPin, Wifi, Shirt, FileText, House, Phone } from 'lucide-react'
 import { setPatientNotes, setPainLevel, setVisitAddress, selectBooking } from '@/store/slices/bookingSlice'
 import { Textarea, PainScale } from '@/components/ui/Field'
 import { firstName } from '@/lib/utils'
 
 export default function DetailsStep({ site, user }) {
   const dispatch = useDispatch()
-  const { patientNotes, painLevel, mode, service } = useSelector(selectBooking)
+  const { patientNotes, painLevel, mode, visitAddress } = useSelector(selectBooking)
 
   return (
     <div>
@@ -43,13 +43,13 @@ export default function DetailsStep({ site, user }) {
             address is not good enough: people move, and a therapist driving to
             last year's flat has lost an afternoon. So it is asked every time and
             copied onto the appointment. */}
-        {booking.mode === 'home' && (
+        {mode === 'home' && (
           <Textarea
             label="Where should the physiotherapist come?"
             name="visitAddress"
             rows={3}
             required
-            value={booking.visitAddress}
+            value={visitAddress}
             onChange={(event) => dispatch(setVisitAddress(event.target.value))}
             placeholder="Flat 402, Sai Residency, Baner Road, Pune 411045. Lift on the left, ring 402."
             hint="A landmark and a floor save the therapist ten minutes on the doorstep"
@@ -95,6 +95,11 @@ export default function DetailsStep({ site, user }) {
                 <Video className="size-4 text-brand-600" aria-hidden="true" />
                 Getting ready for your video consultation
               </>
+            ) : mode === 'home' ? (
+              <>
+                <House className="size-4 text-brand-600" aria-hidden="true" />
+                Getting ready for your home visit
+              </>
             ) : (
               <>
                 <MapPin className="size-4 text-brand-600" aria-hidden="true" />
@@ -104,7 +109,7 @@ export default function DetailsStep({ site, user }) {
           </h3>
 
           <ul className="mt-3 space-y-2.5 text-sm text-ink-700 dark:text-ink-300">
-            {(mode === 'online' ? ONLINE_TIPS : CLINIC_TIPS).map((tip) => (
+            {({ online: ONLINE_TIPS, home: HOME_TIPS }[mode] ?? CLINIC_TIPS).map((tip) => (
               <li key={tip.text} className="flex items-start gap-2.5">
                 <tip.icon className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden="true" />
                 <span>{tip.text}</span>
@@ -141,9 +146,18 @@ const ONLINE_TIPS = [
   { icon: MapPin, text: 'Clear about two metres of floor space, and keep a chair and a water bottle nearby.' },
 ]
 
+// Nothing here about parking or lifts: this list is shown by every clinic on the
+// platform, and a promise one clinic can keep is a false one at the next.
 const CLINIC_TIPS = [
   { icon: FileText, text: 'Bring any X-rays, MRI scans, or notes from a doctor or surgeon.' },
   { icon: Shirt, text: 'Wear loose, comfortable clothing you can move in.' },
-  { icon: MapPin, text: 'Arrive five minutes early. There is lift access and free two-wheeler parking in the compound.' },
+  { icon: MapPin, text: 'Arrive five minutes early so the session can start on time.' },
   { icon: FileText, text: 'Bring a list of any medication you take regularly.' },
+]
+
+const HOME_TIPS = [
+  { icon: House, text: 'Clear about two metres of floor space, with a firm chair nearby.' },
+  { icon: FileText, text: 'Keep any X-rays, MRI scans, or notes from a doctor ready to show.' },
+  { icon: Shirt, text: 'Wear loose, comfortable clothing you can move in.' },
+  { icon: Phone, text: 'Keep your phone with you — the physiotherapist may call when they are close.' },
 ]
