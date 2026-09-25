@@ -1,3 +1,4 @@
+import { redirectIfSignedIn } from '@/lib/guards'
 import { getPublicPlans } from '@/lib/queries'
 import { buildMetadata } from '@/lib/seo'
 import { platform } from '@/config/platform'
@@ -25,6 +26,9 @@ export const metadata = buildMetadata({
 export const dynamic = 'force-dynamic'
 
 export default async function SignupPage({ searchParams }) {
+  // Already signed in here? Then this page is not for you. See lib/guards.js.
+  await redirectIfSignedIn()
+
   const params = await searchParams
   const plans = await getPublicPlans()
 

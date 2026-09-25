@@ -1,3 +1,4 @@
+import { redirectIfSignedIn } from '@/lib/guards'
 import { buildMetadata } from '@/lib/seo'
 import { googleEnabled } from '@/auth.config'
 import { getCurrentClinic } from '@/lib/tenant'
@@ -40,6 +41,9 @@ export const metadata = buildMetadata({
 })
 
 export default async function LoginPage({ searchParams }) {
+  // Already signed in here? Then this page is not for you. See lib/guards.js.
+  await redirectIfSignedIn()
+
   // In the App Router, searchParams is a promise — it must be awaited.
   const params = await searchParams
 
@@ -63,6 +67,9 @@ export default async function LoginPage({ searchParams }) {
       oauthError={typeof params?.error === 'string' ? params.error : null}
       justRegistered={params?.registered === '1'}
       justReset={params?.reset === '1'}
+      // On kokli.in there is no clinic to join as a patient, so "create an
+      // account" has to mean starting a clinic, not registering for one.
+      onPlatform={!clinic}
     />
   )
 }

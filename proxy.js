@@ -64,18 +64,22 @@ const CLINIC_PATIENT_ONLY = ['/dashboard']
 const PLATFORM_ONLY = ['/platform']
 
 /**
- * Signed-in users have no business on these, in either world.
+ * WHY THERE IS NO "SIGNED-IN USERS CANNOT SEE /login" RULE HERE
+ * --------------------------------------------------------------
+ * There used to be. It bounced anybody with a session cookie off /login,
+ * /register, /signup and /forgot-password — and it made the sign-in button a
+ * loop.
  *
- * `/forgot-password` is here: somebody already signed in does not need a reset
- * email, they need the account page, and letting them ask burns one of the three
- * links they are allowed per hour.
+ * The middleware can read the session token but cannot check it against the
+ * database. So a token for an account that had been DELETED still looked valid
+ * here: /login redirected to the home page, the home page had no such user,
+ * "Sign in" went back to /login, and round it went. The same happens to a
+ * deactivated physiotherapist, once lib/auth.js ends their session.
  *
- * `/reset-password` is deliberately NOT here. The token in that URL is the
- * credential — whoever holds it is authorised, session or no session — and a
- * patient who happens to be signed in on a shared reception computer must still be
- * able to follow the link from their own email.
+ * "Is this person really signed in?" needs the database, so the question is now
+ * asked on those pages themselves — see redirectIfSignedIn() in lib/guards.js.
+ * The middleware keeps only the decisions it can make from the token alone.
  */
-const GUEST_ONLY = ['/login', '/register', '/signup', '/forgot-password']
 
 /**
  * Paths that only make sense on a clinic subdomain. Reaching them on the root
@@ -170,12 +174,6 @@ export default auth((request) => {
       }
     }
 
-    // A signed-in person does not need the login page.
-    if (user && matches(GUEST_ONLY)) {
-      const home = user.role === 'platform' ? '/platform' : '/'
-      return NextResponse.redirect(new URL(home, request.nextUrl))
-    }
-
     return proceed()
   }
 
@@ -186,12 +184,6 @@ export default auth((request) => {
   // The platform admin is not reachable from a clinic's domain.
   if (matches(PLATFORM_ONLY)) {
     return NextResponse.redirect(new URL('/', request.nextUrl))
-  }
-
-  // ------------------------------------------------------------- 1. guests
-  if (user && matches(GUEST_ONLY)) {
-    const home = user.role === 'patient' ? '/dashboard' : '/admin'
-    return NextResponse.redirect(new URL(home, request.nextUrl))
   }
 
   // --------------------------------------------------- 2. must be signed in

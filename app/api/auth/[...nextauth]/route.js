@@ -21,6 +21,37 @@
  * ============================================================================
  */
 
+import { NextRequest } from 'next/server'
 import { handlers } from '@/lib/auth'
+import { platform } from '@/config/platform'
 
-export const { GET, POST } = handlers
+/**
+ * Give Auth.js the address the visitor actually typed.
+ *
+ * Behind our own server (server.js), a route handler's `request.url` always says
+ * `localhost:3000` — even for a request to aarogya.localhost:3000 or, in
+ * production, aarogya.kokli.in. The real hostname only survives in the Host
+ * header. Auth.js reads `request.url`, so every clinic looked like the root
+ * domain, and Google sign-in from a clinic's website could never finish: the
+ * callback was never forwarded back to the clinic (see redirectProxyUrl in
+ * auth.config.js).
+ *
+ * Only OUR hostnames are accepted. The Host header is chosen by whoever sends
+ * the request, and a forged one must not be able to make Auth.js build its
+ * links on somebody else's domain.
+ */
+function withRealAddress(request) {
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+  if (!host) return request
+
+  const name = host.split(':')[0]
+  if (name !== platform.domain && !name.endsWith(`.${platform.domain}`)) return request
+
+  const url = new URL(request.url)
+  url.protocol = `${platform.protocol}:`
+  url.host = host
+  return new NextRequest(url, request)
+}
+
+export const GET = (request) => handlers.GET(withRealAddress(request))
+export const POST = (request) => handlers.POST(withRealAddress(request))

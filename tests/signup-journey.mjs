@@ -96,9 +96,6 @@ console.log('\nSLUG AVAILABILITY')
   const free = await (await s.req(PLATFORM, `/api/signup?slug=${SLUG}`)).json()
   check(free.available === true, 'a fresh slug is reported available')
 
-  const taken = await (await s.req(PLATFORM, '/api/signup?slug=aarogya')).json()
-  check(taken.available === false, 'an existing slug is reported taken')
-
   const reserved = await (await s.req(PLATFORM, '/api/signup?slug=admin')).json()
   check(reserved.available === false, 'a reserved slug is refused', reserved.reason ?? '')
 
@@ -150,6 +147,20 @@ console.log('\nWHAT THE TRANSACTION CREATED')
 {
   const [[clinic]] = await db.execute('SELECT * FROM clinics WHERE slug = ?', [SLUG])
   check(Boolean(clinic), 'the clinic row exists')
+
+  /**
+   * "Taken" is checked against the clinic THIS test just created, not a seeded one.
+   *
+   * It used to ask about 'aarogya' — the demo clinic setup-db.js seeds — and failed
+   * the moment somebody cleared the database to test from a clean slate. The API
+   * was right: with no Aarogya, the slug genuinely was free. A suite that claims to
+   * build its own fixtures must not quietly lean on somebody else's.
+   *
+   * It is also the stronger assertion: it proves that signing up is what takes a
+   * slug, rather than that a slug somebody else took is still taken.
+   */
+  const taken = await (await makeSession().req(PLATFORM, `/api/signup?slug=${SLUG}`)).json()
+  check(taken.available === false, 'the slug just signed up for is now reported taken')
   check(clinic?.status === 'trialing', 'it starts on a trial', clinic?.status)
   check(clinic?.onboarding_step === 'details', 'onboarding starts at step 1', clinic?.onboarding_step)
   check(Boolean(clinic?.owner_user_id), 'the owner is linked back to the clinic')
@@ -178,6 +189,23 @@ console.log('\nTHE NEW CLINIC IS LIVE')
   check(res.status === 200, 'its subdomain responds', `status ${res.status}`)
   check(body.includes('Journey Test Clinic'), 'the homepage shows the new clinic name')
   check(!body.includes('Aarogya'), 'with no trace of any other clinic')
+
+  /**
+   * Kokli's own marketing pages must NOT answer on a clinic's hostname.
+   *
+   * They did: the (platform) layout never looked at the host, so a clinic's site
+   * served Kokli's pricing at /pricing and a "create your clinic" form at /signup.
+   * A patient who came to book an appointment could land on a page selling the
+   * software their physiotherapist uses.
+   */
+  for (const path of ['/pricing', '/signup', '/legal/terms']) {
+    const r = await s.req(CLINIC, path)
+    check(r.status === 404, `Kokli's ${path} is not served on the clinic's domain`, `got ${r.status}`)
+  }
+
+  // And an address that belongs to nobody gets no working pages at all.
+  const ghost = await s.req('http://no-such-clinic.localhost:3000', '/signup')
+  check(ghost.status === 404, 'an unknown subdomain does not serve a working signup form', `got ${ghost.status}`)
 }
 
 /* ------------------------------------------------- 5. owner is sent to setup */

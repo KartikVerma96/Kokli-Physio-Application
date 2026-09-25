@@ -74,7 +74,7 @@ jobs:
           127.0.0.1 acctest.localhost acctest2.localhost billtest.localhost
           127.0.0.1 biztest.localhost cxltest.localhost journeytest.localhost
           127.0.0.1 mailtest.localhost otptest.localhost realtest.localhost
-          127.0.0.1 revtest.localhost watest.localhost
+          127.0.0.1 revtest.localhost watest.localhost no-such-clinic.localhost
           HOSTS
 
       - run: npm ci
@@ -91,7 +91,6 @@ jobs:
           DB_PASSWORD=ci
           DB_NAME=physio_clinic
           AUTH_SECRET=ci-secret-only-used-inside-this-job-abcdefghijklmnop
-          AUTH_URL=http://localhost:3000
           PLATFORM_DOMAIN=localhost
           PLATFORM_PROTOCOL=http
           PLATFORM_ENCRYPTION_KEY=ci-encryption-key-only-used-inside-this-job=

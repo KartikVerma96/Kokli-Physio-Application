@@ -97,7 +97,7 @@ DB_PASSWORD=<the password from step 3>
 
 PLATFORM_DOMAIN=kokli.in
 PLATFORM_PROTOCOL=https
-AUTH_URL=https://kokli.in
+# No AUTH_URL — it breaks Google sign-in on clinic subdomains. See auth.config.js.
 
 # Generate each of these. Never reuse the development values.
 AUTH_SECRET=$(openssl rand -base64 32)

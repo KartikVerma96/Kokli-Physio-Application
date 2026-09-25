@@ -33,12 +33,12 @@ import PhoneLogin from '@/components/auth/PhoneLogin'
 import { loginSchema, validate } from '@/lib/validation'
 import { toast } from '@/lib/toast'
 
-export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthError, justRegistered, justReset }) {
+export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthError, justRegistered, justReset, onPlatform }) {
   const router = useRouter()
 
   const [values, setValues] = useState({ email: '', password: '' })
   const [errors, setErrors] = useState({})
-  const [formError, setFormError] = useState(oauthErrorMessage(oauthError))
+  const [formError, setFormError] = useState(oauthErrorMessage(oauthError, onPlatform))
   const [submitting, setSubmitting] = useState(false)
 
   /**
@@ -75,16 +75,20 @@ export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthErro
    * role and decide afterwards — the callback URL has to be committed up front. It
    * points at /dashboard, and the middleware forwards staff on to /admin from there
    * (proxy.js rule 4), which is exactly the case that used to break.
+   *
+   * On kokli.in it points back at /login instead. /dashboard does not exist there,
+   * and we cannot know yet whether this is the platform owner or a clinic owner —
+   * /login already sends each signed-in account to its own home.
    */
-  const destination = next || '/dashboard'
+  const destination = next || (onPlatform ? '/login' : '/dashboard')
 
   // Google sends failures back as ?error=... . The inline banner below shows it, but
   // a redirect lands you on a fresh page and it is easy to miss text you did not
   // watch appear — so it is announced as well.
   useEffect(() => {
-    const message = oauthErrorMessage(oauthError)
+    const message = oauthErrorMessage(oauthError, onPlatform)
     if (message) toast.error(message)
-  }, [oauthError])
+  }, [oauthError, onPlatform])
 
   function update(field) {
     return (event) => {
@@ -182,11 +186,26 @@ export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthErro
        * /admin does not exist on the root domain, so the middleware bounces you
        * to the marketing page and the sign-in appears to have done nothing.
        */
+      const role = session?.user?.role
+
+      /**
+       * A clinic owner signing in on kokli.in, not on their clinic's address.
+       *
+       * Their admin lives on another hostname, which this page cannot work out on
+       * its own — so it reloads /login and lets the server send them there (see
+       * redirectIfSignedIn in lib/guards.js). A full load rather than
+       * router.push, because the destination is a different origin.
+       */
+      if (onPlatform && role !== 'platform') {
+        window.location.assign('/login')
+        return
+      }
+
       const roleHome =
         {
           patient: '/dashboard',
           platform: '/platform',
-        }[session?.user?.role] ?? '/admin'
+        }[role] ?? '/admin'
 
       // An explicit ?next= wins — it is where they were heading before we asked them
       // to sign in.
@@ -340,13 +359,27 @@ export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthErro
       </form>
 
       <p className="mt-7 text-center text-sm text-ink-600 dark:text-ink-400">
-        New here?{' '}
-        <Link
-          href={next ? `/register?next=${encodeURIComponent(next)}` : '/register'}
-          className="font-semibold text-brand-700 hover:underline dark:text-brand-400"
-        >
-          Create an account
-        </Link>
+        {onPlatform ? (
+          <>
+            Running a clinic?{' '}
+            <Link
+              href="/signup"
+              className="font-semibold text-brand-700 hover:underline dark:text-brand-400"
+            >
+              Start your free trial
+            </Link>
+          </>
+        ) : (
+          <>
+            New here?{' '}
+            <Link
+              href={next ? `/register?next=${encodeURIComponent(next)}` : '/register'}
+              className="font-semibold text-brand-700 hover:underline dark:text-brand-400"
+            >
+              Create an account
+            </Link>
+          </>
+        )}
       </p>
 
       {/* The demo credentials, so anyone learning from this project can get in
@@ -368,9 +401,15 @@ export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthErro
 }
 
 /** Turn an Auth.js error code from the URL into something a human can act on. */
-function oauthErrorMessage(code) {
+function oauthErrorMessage(code, onPlatform) {
   if (!code) return null
   const messages = {
+    // A Google address with no account behind it (lib/auth.js). On kokli.in that
+    // is usually a clinic owner who has not signed up yet; on a clinic's site it
+    // means the ten-minute window to finish signing up ran out.
+    NoAccount: onPlatform
+      ? 'There is no Kokli account for that Google address yet. Running a clinic? Start your free trial with this email — then Google sign-in works. A patient? Sign up on your clinic\'s website.'
+      : 'We could not finish creating your account. Please press Continue with Google again.',
     OAuthAccountNotLinked:
       'An account already exists with that email address. Sign in with your password instead.',
     AccessDenied: 'That sign-in was cancelled or the account is not active.',

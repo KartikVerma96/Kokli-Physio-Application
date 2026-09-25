@@ -1,5 +1,5 @@
 import Google from 'next-auth/providers/google'
-import { platform } from '@/config/platform'
+import { platform, platformUrl } from '@/config/platform'
 
 /**
  * ============================================================================
@@ -38,18 +38,22 @@ export const googleEnabled = Boolean(
  *
  *   1. Signing up on the platform and landing on your new clinic subdomain
  *      already signed in.
- *   2. Google sign-in, which must come back to a single registered callback URL
- *      on the root domain — Google does not allow wildcard redirect URIs, so
- *      per-subdomain OAuth callbacks are impossible.
+ *   2. Signing in on kokli.in as a clinic owner and being sent on to your own
+ *      clinic's admin — see redirectIfSignedIn() in lib/guards.js.
+ *
+ * (Google sign-in does NOT depend on it. Its callback is forwarded back to the
+ * clinic's own hostname — see redirectProxyUrl below.)
  *
  * The security consequence is handled deliberately in proxy.js: a session is
  * VISIBLE everywhere, so every protected route re-checks that the session's
  * clinic matches the hostname. Sharing the cookie without that check would let
  * any clinic's patient walk into another clinic's site signed in.
  *
- * On localhost the domain is left undefined. Browsers refuse `Domain=.localhost`
- * outright, but they already treat `*.localhost` as the same site for cookie
- * purposes, so subdomain sharing works in development anyway.
+ * On localhost the domain is left undefined, because browsers refuse
+ * `Domain=.localhost` outright. The price: in development a login on
+ * `localhost:3000` is NOT visible on `aarogya.localhost:3000`, so both flows
+ * above ask you to sign in a second time on the clinic. On a real domain they
+ * do not.
  */
 function cookieDomain() {
   const domain = platform.domain
@@ -72,9 +76,14 @@ export const authConfig = {
      * Every server-rendered page can therefore know who you are with zero
      * queries, which is what keeps a multi-tenant app fast.
      *
-     * The trade-off: because the session is self-contained, changing someone's
-     * role or clinic in the database does not take effect until their token
-     * refreshes. `updateAge` below caps that at a day.
+     * The trade-off: because the session is self-contained, a change in the
+     * database does not reach it on its own. That is handled in the jwt callback
+     * in lib/auth.js, which re-reads the account every five minutes and ends the
+     * session if it has been deleted, deactivated or suspended.
+     *
+     * NOT by `updateAge` below, despite what this comment used to say. updateAge
+     * only re-signs the cookie to extend it; it never looks at the database, so a
+     * deactivated physiotherapist kept working access for the full 30 days.
      */
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60,
@@ -114,17 +123,32 @@ export const authConfig = {
     : [],
 
   /**
-   * Send every OAuth callback to the ROOT domain.
+   * Send every OAuth callback to the ROOT domain, then back to the clinic.
    *
    * Google requires each redirect URI to be registered exactly, and does not
    * accept wildcards — so `https://*.kokli.in/api/auth/callback/google` is
-   * not a thing you can register. `redirectProxyUrl` makes Auth.js always use
-   * the root domain for the callback and then forward the user on, so one
-   * registered URI covers every clinic.
+   * not a thing you can register. With `redirectProxyUrl`:
+   *
+   *   1. aarogya.kokli.in sends the patient to Google, with the one registered
+   *      callback (kokli.in/api/auth/callback/google) and its own address
+   *      sealed inside the `state` parameter
+   *   2. Google returns them to kokli.in, which only unseals `state` and
+   *      forwards the code to aarogya.kokli.in/api/auth/callback/google
+   *   3. aarogya.kokli.in finishes the sign-in itself — which matters, because
+   *      the PKCE cookie from step 1 exists only on that hostname
+   *
+   * Used in development too (with the port): without it the callback finished
+   * on localhost:3000, where the clinic's PKCE cookie is invisible, so Google
+   * sign-in could never work from a clinic subdomain.
+   *
+   * AUTH_URL MUST NOT BE SET. next-auth rewrites every request's address to
+   * AUTH_URL, so aarogya.kokli.in would look like kokli.in, step 1 would think
+   * it was already on the root domain, and nothing would ever be forwarded.
+   * `trustHost` above, and withRealAddress() in
+   * app/api/auth/[...nextauth]/route.js, are what let each hostname speak for
+   * itself.
    */
-  ...(googleEnabled && platform.domain !== 'localhost'
-    ? { redirectProxyUrl: `${platform.protocol}://${platform.domain}/api/auth` }
-    : {}),
+  ...(googleEnabled ? { redirectProxyUrl: platformUrl('/api/auth') } : {}),
 
   callbacks: {
     /**

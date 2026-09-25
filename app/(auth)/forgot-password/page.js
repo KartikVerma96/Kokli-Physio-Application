@@ -1,3 +1,4 @@
+import { redirectIfSignedIn } from '@/lib/guards'
 import Link from 'next/link'
 import { buildMetadata } from '@/lib/seo'
 import { getCurrentClinic } from '@/lib/tenant'
@@ -33,6 +34,9 @@ export const metadata = buildMetadata({
 })
 
 export default async function ForgotPasswordPage() {
+  // Already signed in here? Then this page is not for you. See lib/guards.js.
+  await redirectIfSignedIn()
+
   const clinic = await getCurrentClinic()
   const phoneEnabled = clinic ? await canSendAuthCodes(clinic) : false
 

@@ -1,8 +1,10 @@
 import Link from 'next/link'
-import { Stethoscope } from 'lucide-react'
+import { notFound } from 'next/navigation'
 import { platform } from '@/config/platform'
+import { getCurrentSlug } from '@/lib/tenant'
 import Button from '@/components/ui/Button'
 import ThemeToggle from '@/components/layout/ThemeToggle'
+import KokliLogo from '@/components/ui/KokliLogo'
 
 /**
  * ============================================================================
@@ -28,24 +30,55 @@ const NAV = [
   { href: '/#faq', label: 'FAQ' },
 ]
 
-export default function PlatformLayout({ children }) {
+export default async function PlatformLayout({ children }) {
+  /**
+   * ==========================================================================
+   *  THE MARKETING SITE EXISTS ON THE ROOT DOMAIN ONLY
+   * ==========================================================================
+   *  This layout used to render on any hostname, which meant Kokli's own pages
+   *  leaked onto every clinic's website:
+   *
+   *    aarogya.kokli.in/pricing   Kokli selling software at ₹1,299 a month,
+   *                               on a physiotherapist's own site, to a patient
+   *                               who came to book an appointment
+   *    aarogya.kokli.in/signup    "Create your clinic", from inside a clinic
+   *    typo.kokli.in/signup       a working form on an address that does not exist
+   *
+   *  The last one is how it was found: a tab left open on a clinic that had just
+   *  been deleted still showed a live signup page, while its home page correctly
+   *  returned 404. The same address answering two different ways.
+   *
+   *  Any subdomain at all — a real clinic or a mistyped one — gets a 404 here.
+   *  A clinic's own pages live in app/(public), and never come through this file.
+   */
+  if (await getCurrentSlug()) notFound()
+
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-50 border-b border-ink-200/60 glass dark:border-ink-800/60">
-        <nav className="container-page flex h-16 items-center justify-between gap-4" aria-label="Main">
+      {/* The same bar a clinic's website wears — a floating capsule inset from
+          the page edges, sitting over the section below rather than in a band of
+          its own. See components/layout/Navbar.js, which does this for clinics;
+          the negative margin gives back the height this header occupies (12px of
+          top padding plus the bar: 64px on a phone, 72px from lg), and the first
+          section of every page below carries that height as top padding. */}
+      <header className="sticky top-0 z-50 -mb-19 px-3 pt-3 sm:px-5 lg:-mb-21">
+        <nav
+          className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 rounded-3xl border border-ink-200/60 bg-white/70 px-4 shadow-soft backdrop-blur-xl transition-all duration-300 lg:h-18 lg:px-6 dark:border-white/10 dark:bg-ink-900/70"
+          aria-label="Main"
+        >
           <Link href="/" className="flex shrink-0 items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white shadow-brand">
-              <Stethoscope className="size-4.5" aria-hidden="true" />
+            <KokliLogo size={32} className="size-8" />
+            <span className="font-display text-[17px] font-bold leading-none tracking-tight">
+              {platform.name}
             </span>
-            <span className="font-display text-base font-bold">{platform.name}</span>
           </Link>
 
-          <ul className="hidden items-center gap-1 md:flex">
+          <ul className="hidden items-center gap-7 md:flex">
             {NAV.map((item) => (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold text-ink-600 transition-colors hover:text-ink-900 dark:text-ink-300 dark:hover:text-white"
+                  className="text-[15px] font-medium text-ink-500 transition-colors hover:text-ink-900 dark:text-ink-400 dark:hover:text-white"
                 >
                   {item.label}
                 </Link>
@@ -53,15 +86,15 @@ export default function PlatformLayout({ children }) {
             ))}
           </ul>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <ThemeToggle />
             <Link
               href="/login"
-              className="hidden rounded-xl px-3.5 py-2 text-sm font-semibold text-ink-600 transition-colors hover:text-ink-900 sm:block dark:text-ink-300 dark:hover:text-white"
+              className="hidden shrink-0 px-2 text-[15px] font-medium whitespace-nowrap text-ink-500 transition-colors hover:text-ink-900 sm:block dark:text-ink-400 dark:hover:text-white"
             >
               Sign in
             </Link>
-            <Button href="/signup" size="sm">
+            <Button href="/signup" size="sm" className="rounded-full">
               Start free trial
             </Button>
           </div>
@@ -74,9 +107,12 @@ export default function PlatformLayout({ children }) {
 
       <footer className="arc-left relative overflow-hidden border-t border-ink-200 bg-white dark:border-ink-800 dark:bg-ink-900">
         <div className="container-page flex flex-col gap-4 py-10 text-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-display font-bold">{platform.name}</p>
-            <p className="mt-1 text-ink-500">{platform.tagline}</p>
+          <div className="flex items-center gap-3">
+            <KokliLogo size={40} className="size-10 shrink-0" />
+            <div>
+              <p className="font-display font-bold">{platform.name}</p>
+              <p className="mt-1 text-ink-500">{platform.tagline}</p>
+            </div>
           </div>
           {/* Two rows, because these are two different kinds of link and mixing
               them makes both harder to find. Razorpay's KYC review and Meta's
