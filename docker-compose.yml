@@ -55,6 +55,19 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
 
+    # The backups directory is the host's, not the container's. `docker compose
+    # exec app npm run backup` writes a dump of every clinic's records; written
+    # inside the container it would vanish with the next `up --build`, and the
+    # first time anyone noticed would be the day they needed it.
+    #
+    # Create it before the first `up`, owned by uid 1000 — the `node` user the
+    # container runs as. Docker creates a missing bind-mount path as root, and
+    # the first sign is a backup that fails at 3am:
+    #
+    #     mkdir -p backups && sudo chown 1000:1000 backups
+    volumes:
+      - ./backups:/app/backups
+
     restart: unless-stopped
 
     # Container logs are a disk-filling device left alone. Three files of 10MB

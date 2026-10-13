@@ -222,11 +222,19 @@ done
             "--build-arg NEXT_PUBLIC_SITE_URL=${env.SITE_URL ?: 'http://localhost:3000'} ."
           )
           image.tag(sha)
+          // docker-compose.yml runs `kokli:latest`. Without this tag the image
+          // this pipeline just built is not the image that would start.
+          image.tag('latest')
 
           // A built image can still be an image that cannot start. This asks the
           // runtime stage to load the server's own entry point — no database, no
           // port, just "does this thing hold together".
           sh "docker run --rm --entrypoint node kokli:${env.BUILD_NUMBER} -e \"require('next'); require('./lib/videoToken'); console.log('image ok')\""
+
+          // The compose file is the other half of this; a typo in it would only
+          // be found on the server otherwise. `config -q` parses and resolves it
+          // without starting anything.
+          sh 'docker compose config -q'
         }
       }
       post {

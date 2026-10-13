@@ -279,6 +279,11 @@ rather not install Node at all.
 ```bash
 # .env.local sits next to the compose file, exactly as above, with one change:
 #   DB_HOST=host.docker.internal
+
+# The container writes backups here, as uid 1000. Docker would otherwise create
+# this directory as root and every backup would fail.
+mkdir -p backups && sudo chown 1000:1000 backups
+
 docker compose up -d --build
 ```
 

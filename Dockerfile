@@ -63,6 +63,17 @@ ENV PORT=3000
 # and every startup log reads like a bug.
 ENV HOSTNAME=0.0.0.0
 
+# mysqldump, because scripts/backup.js shells out to it — and DEPLOYMENT.md tells
+# you to take backups with `docker compose exec app npm run backup`. An image
+# whose documented backup command cannot run is an image with no backups.
+#
+# This is Debian's default client (MariaDB's), which speaks to MySQL 9 including
+# its caching_sha2_password login. If a future base image ever ships one that
+# does not, backup.js takes a MYSQLDUMP_PATH override rather than guessing.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends default-mysql-client \
+  && rm -rf /var/lib/apt/lists/*
+
 # Production dependencies only. --ignore-scripts because no package here needs a
 # postinstall, and an image build is the worst place to run arbitrary ones.
 COPY package.json package-lock.json ./
