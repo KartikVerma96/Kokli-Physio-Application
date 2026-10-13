@@ -1,0 +1,100 @@
+# =============================================================================
+#  Kokli — one app container, and a database only when you ask for one
+# =============================================================================
+#  PRODUCTION
+#    docker compose up -d --build
+#
+#  That starts the application and nothing else. MySQL is expected to be running
+#  on the host, with DB_HOST in .env.local pointing at it:
+#
+#    DB_HOST=host.docker.internal
+#
+#  WHY THE DATABASE IS NOT PART OF THE DEFAULT STACK
+#  -------------------------------------------------
+#  It holds medical records. `docker compose down -v` deletes volumes, and it is
+#  one word away from `docker compose down` — a command people type when they
+#  mean "restart". A database on the host cannot be erased by a typo in the
+#  wrong directory, and it is restored from a backup by somebody who knows they
+#  are restoring. See DEPLOYMENT.md.
+#
+#  LOCAL DEVELOPMENT
+#    docker compose --profile local-db up -d --build
+#
+#  That adds a throwaway MySQL for a laptop, where the data is seeded and losing
+#  it costs nothing. Never run that profile on a server.
+# =============================================================================
+
+name: kokli
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        # Compiled into the JavaScript the browser downloads, so it has to be
+        # known at build time — unlike everything in .env.local, which is read
+        # when the container starts.
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-http://localhost:3000}
+    image: kokli:latest
+    container_name: kokli
+
+    # Every secret comes from the host at run time. Nothing is baked into the
+    # image, and this file names no credential of its own.
+    env_file:
+      - .env.local
+
+    # Bound to loopback, not 0.0.0.0. Caddy (or nginx) terminates TLS and
+    # forwards to this port; nothing outside the machine should reach the Node
+    # process directly, and on a server with no firewall that is the difference.
+    ports:
+      - '127.0.0.1:3000:3000'
+
+    # Lets the container reach a MySQL running on the host as
+    # `host.docker.internal`, which Docker provides on macOS and Windows but not
+    # on Linux without this line.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+    restart: unless-stopped
+
+    # Container logs are a disk-filling device left alone. Three files of 10MB
+    # is enough to debug yesterday and not enough to fill a small VPS.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+    # The image already defines HEALTHCHECK; this only makes `docker compose ps`
+    # wait a little longer before judging a cold start.
+    healthcheck:
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  #  LOCAL ONLY. Started by `--profile local-db`, never by a plain `up`.
+  # ---------------------------------------------------------------------------
+  db:
+    profiles: ['local-db']
+    image: mysql:9
+    container_name: kokli-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-devpassword}
+      MYSQL_DATABASE: ${DB_NAME:-physio_clinic}
+    # Loopback again: a MySQL reachable from the internet is somebody else's
+    # database within the week.
+    ports:
+      - '127.0.0.1:3306:3306'
+    volumes:
+      - kokli-db-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-p${DB_PASSWORD:-devpassword}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  # Named, so it survives `docker compose down`. It does NOT survive
+  # `docker compose down -v`, which is the whole reason production keeps its
+  # database somewhere else.
+  kokli-db-data:

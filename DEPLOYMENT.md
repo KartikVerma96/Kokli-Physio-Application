@@ -236,9 +236,59 @@ cd ~/kokli && npm run backup && npm run db:migrate
 A schema change against medical records should be run by somebody who is
 watching it, with a backup taken minutes earlier.
 
+### Jenkins instead of GitHub Actions
+
+`Jenkinsfile` runs the same three checks and the same deploy, for a Jenkins
+installed on your own machine. The agent needs Docker and the **Docker Pipeline**
+plugin; Node and MySQL run as containers, so neither has to be installed on it.
+
+| In Jenkins | What |
+|---|---|
+| Credential `kokli-deploy-key` | SSH username with private key — the same key as above |
+| Global env `DEPLOY_HOST` | the server address. Unset, the deploy stage skips itself |
+| Global env `SITE_URL` | optional, e.g. `https://kokli.in`, used when building the image |
+
+Running both is running the same gate twice. Pick one: GitHub Actions if the
+repository is the centre of things, Jenkins if the server is.
+
 ---
 
-## 8. Before the first real clinic
+## 8. Running it in Docker instead
+
+The pm2 setup above is the recommended one, and it is what section 3 builds.
+`Dockerfile` and `docker-compose.yml` are there for a machine where you would
+rather not install Node at all.
+
+```bash
+# .env.local sits next to the compose file, exactly as above, with one change:
+#   DB_HOST=host.docker.internal
+docker compose up -d --build
+```
+
+**MySQL still runs on the host.** It is not in the compose file by default, and
+that is deliberate: `docker compose down -v` erases volumes, and it is one word
+from the `down` people type when they mean "restart". A database holding medical
+records should not be one typo from gone. The `local-db` profile exists for a
+laptop and must never be used on a server.
+
+Caddy does not change — it still forwards to `127.0.0.1:3000`, which is the only
+address the container publishes:
+
+```
+reverse_proxy 127.0.0.1:3000
+```
+
+Backups, migrations and the cron jobs are run the same way, through the
+container:
+
+```bash
+docker compose exec app npm run backup
+docker compose exec app npm run db:migrate   # by hand, after a backup, as always
+```
+
+---
+
+## 9. Before the first real clinic
 
 - [ ] `AUTH_SECRET`, `PLATFORM_ENCRYPTION_KEY`, `CRON_SECRET` are fresh — not the development ones
 - [ ] The seeded platform password is changed: `npm run set-password -- owner@kokli.in --generate`

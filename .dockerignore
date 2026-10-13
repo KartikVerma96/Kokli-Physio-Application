@@ -26,6 +26,7 @@ tests
 *.md
 Jenkinsfile
 Dockerfile
+docker-compose.yml
 .dockerignore
 .vscode
 .idea
