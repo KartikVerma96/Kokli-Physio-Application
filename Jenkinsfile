@@ -22,9 +22,12 @@
 //
 //  WHAT THE AGENT NEEDS
 //  --------------------
-//    * Docker, and the "Docker Pipeline" plugin. Node and MySQL both run as
-//      containers, so the agent needs neither installed and the build cannot be
-//      broken by whichever Node version happens to be on the machine.
+//    * Docker on the agent. Node and MySQL both run as containers, so the agent
+//      needs neither installed, and the build cannot be broken by whichever
+//      Node version happens to be on the machine.
+//    * Two plugins, both of which ship with the "suggested plugins" install:
+//        Docker Pipeline        — docker.image(), docker.build()
+//        Credentials Binding    — withCredentials()
 //    * For the deploy stage only:
 //        - an SSH credential with id `kokli-deploy-key` (Jenkins → Credentials
 //          → SSH Username with private key)
@@ -52,7 +55,6 @@ pipeline {
   agent none
 
   options {
-    timestamps()
     // A pipeline that hangs forever holds an agent and tells you nothing.
     timeout(time: 40, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '30'))
@@ -242,20 +244,34 @@ done
       when {
         beforeAgent true
         allOf {
-          branch 'main'
+          // BRANCH_NAME exists only in a multibranch job. A plain "Pipeline
+          // script from SCM" job has none — it is already pointed at one branch,
+          // so there is nothing to filter and this must not silently skip.
+          expression { return env.BRANCH_NAME == null || env.BRANCH_NAME == 'main' }
           // No server configured yet? Then there is nothing to deploy to, and a
-          // red build would be a lie.
-          expression { return env.DEPLOY_HOST?.trim() }
+          // red build would be a lie. Compared explicitly: a `when` expression
+          // has to return a boolean, not a string that happens to be non-empty.
+          expression { return env.DEPLOY_HOST != null && env.DEPLOY_HOST.trim() != '' }
         }
       }
       steps {
-        sshagent(credentials: ['kokli-deploy-key']) {
+        // withCredentials, not sshagent: it needs no extra plugin, and it hands
+        // over the USERNAME as well as the key. sshagent gives only the key, so
+        // `ssh $DEPLOY_HOST` would log in as whoever Jenkins runs as — which on
+        // most installs is `jenkins`, and that account does not exist on the
+        // server.
+        withCredentials([sshUserPrivateKey(
+          credentialsId: 'kokli-deploy-key',
+          keyFileVariable: 'SSH_KEY',
+          usernameVariable: 'SSH_USER'
+        )]) {
           // NO MIGRATIONS. `npm run db:migrate` is deliberately left to a human:
           // a schema change on a database holding medical records should be run
           // by somebody who is watching, with a backup taken minutes earlier.
           // See DEPLOYMENT.md.
           sh '''
-ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$DEPLOY_HOST" bash -s <<'REMOTE'
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+    "$SSH_USER@$DEPLOY_HOST" bash -s <<'REMOTE'
 set -euo pipefail
 cd ~/kokli
 

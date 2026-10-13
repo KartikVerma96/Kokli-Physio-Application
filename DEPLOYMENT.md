@@ -238,15 +238,32 @@ watching it, with a backup taken minutes earlier.
 
 ### Jenkins instead of GitHub Actions
 
-`Jenkinsfile` runs the same three checks and the same deploy, for a Jenkins
-installed on your own machine. The agent needs Docker and the **Docker Pipeline**
-plugin; Node and MySQL run as containers, so neither has to be installed on it.
+`Jenkinsfile` runs the same checks and the same deploy, for a Jenkins installed
+on your own machine. Node and MySQL run as containers, so neither has to be
+installed on the agent — but Docker does, and the Jenkins user has to be allowed
+to use it:
+
+```bash
+sudo usermod -aG docker jenkins && sudo systemctl restart jenkins
+```
+
+Job type: **Pipeline** → *Pipeline script from SCM* → Git → this repository →
+branch `main` → Script Path `Jenkinsfile`. Both plugins it needs (**Docker
+Pipeline**, **Credentials Binding**) are in Jenkins' suggested set.
 
 | In Jenkins | What |
 |---|---|
-| Credential `kokli-deploy-key` | SSH username with private key — the same key as above |
+| Credential `kokli-deploy-key` | *SSH Username with private key*. The **username** on it is the server user — the pipeline logs in as that |
 | Global env `DEPLOY_HOST` | the server address. Unset, the deploy stage skips itself |
 | Global env `SITE_URL` | optional, e.g. `https://kokli.in`, used when building the image |
+
+Before the first run, check the Jenkins node has at least one executor — with
+zero, every stage queues for ever and nothing in the log says why. The
+Jenkinsfile can also be checked without running it:
+
+```bash
+curl -X POST -F "jenkinsfile=<Jenkinsfile" http://localhost:8080/pipeline-model-converter/validate
+```
 
 Running both is running the same gate twice. Pick one: GitHub Actions if the
 repository is the centre of things, Jenkins if the server is.
