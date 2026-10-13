@@ -9,7 +9,16 @@
 //                        four different roles over HTTP and asserts that one
 //                        clinic cannot reach another's data. Mocking that would
 //                        prove nothing.
-//    3. DEPLOY           only from main, and only once both have passed
+//    3. DOCKER IMAGE     builds the Dockerfile, so it cannot quietly rot
+//    4. DEPLOY           only from main, and only once the rest have passed
+//
+//  THE IMAGE IS BUILT, NOT DEPLOYED
+//  --------------------------------
+//  The deploy below is still the pm2 one from DEPLOYMENT.md: the server runs
+//  the app directly and MySQL natively beside it. The image stage exists so the
+//  Dockerfile is exercised on every build rather than discovered to be broken
+//  on the day somebody needs it. Switching the deploy to run that image is a
+//  separate decision — it would need Docker on the server and a registry.
 //
 //  WHAT THE AGENT NEEDS
 //  --------------------
@@ -24,6 +33,11 @@
 //      With no DEPLOY_HOST the deploy stage skips itself rather than failing,
 //      so this file is useful from the very first build, before any server
 //      exists.
+//    * Optional: a global environment variable SITE_URL (e.g. https://kokli.in).
+//      It becomes NEXT_PUBLIC_SITE_URL in the image, which is compiled into the
+//      JavaScript the browser downloads and so cannot be set at run time. Unset,
+//      the image is built for localhost — fine for a build that is only proving
+//      the Dockerfile still works.
 //
 //  WHY THE DEV SERVER AND NOT THE PRODUCTION BUILD
 //  -----------------------------------------------
@@ -192,7 +206,36 @@ done
     }
 
     /* ===================================================================== */
-    /*  3. DEPLOY                                                            */
+    /*  3. THE DOCKER IMAGE                                                  */
+    /* ===================================================================== */
+    stage('Docker image') {
+      agent any
+      steps {
+        script {
+          // Tagged with the build number and the commit, because "latest" tells
+          // you nothing on the day you need to know what is running.
+          def sha = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          def image = docker.build(
+            "kokli:${env.BUILD_NUMBER}",
+            "--build-arg NEXT_PUBLIC_SITE_URL=${env.SITE_URL ?: 'http://localhost:3000'} ."
+          )
+          image.tag(sha)
+
+          // A built image can still be an image that cannot start. This asks the
+          // runtime stage to load the server's own entry point — no database, no
+          // port, just "does this thing hold together".
+          sh "docker run --rm --entrypoint node kokli:${env.BUILD_NUMBER} -e \"require('next'); require('./lib/videoToken'); console.log('image ok')\""
+        }
+      }
+      post {
+        // Every build leaves an image behind. Keep the tagged ones, drop the
+        // layers nothing points at any more, or the agent fills up in a month.
+        always { sh 'docker image prune -f || true' }
+      }
+    }
+
+    /* ===================================================================== */
+    /*  4. DEPLOY                                                            */
     /* ===================================================================== */
     stage('Deploy') {
       agent any

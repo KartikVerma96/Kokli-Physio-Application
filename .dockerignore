@@ -1,0 +1,33 @@
+# =============================================================================
+#  What never goes into the image
+# =============================================================================
+#  This file is a security control, not an optimisation. Without it `COPY . .`
+#  copies .env.local — every secret this application has — and backups/, which
+#  holds patient records, into a layer that anybody who can pull the image can
+#  read back. Both are gitignored; neither is dockerignored by that.
+# =============================================================================
+
+.env
+.env.*
+!.env.example
+backups/
+
+.git
+.github
+.gitignore
+
+node_modules
+.next
+out
+
+# Nothing below is needed to run the app, and each one is a reason to rebuild
+# a layer that did not change.
+tests
+*.md
+Jenkinsfile
+Dockerfile
+.dockerignore
+.vscode
+.idea
+.DS_Store
+npm-debug.log*
