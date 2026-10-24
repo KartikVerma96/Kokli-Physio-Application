@@ -93,6 +93,15 @@ services:
 
     restart: unless-stopped
 
+    # A ceiling, on a server without swap that other people share. The app
+    # normally uses a few hundred MB; a leak ends in Kokli's own restart, not in
+    # the kernel choosing somebody else's database to kill. And if the machine
+    # does run out of memory, Kokli's processes are the first it considers.
+    # The backup and migration containers a deploy runs inherit the same.
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    oom_score_adj: 500
+
     # Container logs are a disk-filling device left alone. Three files of 10MB
     # is enough to debug yesterday and not enough to fill a small VPS.
     logging:

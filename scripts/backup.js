@@ -234,6 +234,15 @@ async function backup() {
   let before
   let after
   try {
+    // A restore check that was killed half-way (its container stopped under it)
+    // never reached its own clean-up, and left a full copy of every clinic's
+    // records in the scratch database. The next backup — at most a day later —
+    // removes it, rather than the next check a week later.
+    try {
+      await conn.query(`DROP DATABASE IF EXISTS \`${DB.database}_verify\``)
+    } catch {
+      /* no right to drop it here (a laptop's own setup): nothing to clean */
+    }
     expectedTables = await countTables(conn, DB.database)
     before = await rowCounts(conn, DB.database)
 
@@ -546,6 +555,29 @@ async function verifyRestore() {
   const conn = await mysql.createConnection({ ...DB, database: undefined })
   try {
     await conn.query(`DROP DATABASE IF EXISTS \`${scratch}\``)
+
+    /**
+     * The restore writes a second full copy of the database, onto a disk that
+     * on Kokli's server is shared with other people's databases. Not when the
+     * disk cannot spare it twice over plus 2 GB — skipped, loudly, rather than
+     * be the thing that fills it. (BACKUP_DIR is on the same disk as MySQL's
+     * data there; elsewhere this is an estimate, and a cautious one.)
+     */
+    const [[size]] = await conn.query(
+      `SELECT COALESCE(SUM(data_length + index_length), 0) AS bytes
+         FROM information_schema.tables WHERE table_schema = ?`,
+      [DB.database]
+    )
+    const disk = fs.statfsSync(BACKUP_DIR)
+    const free = disk.bavail * disk.bsize
+    const needed = 2 * Number(size.bytes) + 2 * 1024 ** 3
+    if (free < needed) {
+      console.error(c.red(`\n  ✗ Restore check SKIPPED: ${(free / 1024 ** 3).toFixed(1)} GB free, and it needs`))
+      console.error(c.red(`    ${(needed / 1024 ** 3).toFixed(1)} GB to restore a copy safely. Free some disk space.\n`))
+      process.exitCode = 1
+      return
+    }
+
     await conn.query(`CREATE DATABASE \`${scratch}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
 
     const ok = withDefaultsFile((defaults) => {

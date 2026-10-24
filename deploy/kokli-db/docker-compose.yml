@@ -35,6 +35,11 @@ services:
     image: mysql:9.7
     container_name: kokli-mysql
     restart: unless-stopped
+    # If this shared, swapless server ever runs out of memory, Kokli's database
+    # is considered before other people's processes. (A MySQL killed that way
+    # loses no committed data: InnoDB recovers it on the restart above.) No
+    # hard cap yet — that waits until its real use has been measured.
+    oom_score_adj: 300
 
     # The two passwords, generated on the server — never committed. The format
     # is in env.example beside this file.

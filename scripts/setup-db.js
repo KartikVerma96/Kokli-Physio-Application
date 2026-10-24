@@ -201,25 +201,40 @@ async function main() {
   }
 
   // ------------------------------------------------------------ safety check
+  /**
+   * Only ever into an EMPTY database.
+   *
+   * This used to refuse only when the clinics table had rows. On a live server
+   * after its demo clinic was removed, that is zero rows — so running setup
+   * again dropped the payments, notes and reviews tables, stopped half-way
+   * (another table still pointed at appointments), and every check after it
+   * still passed: migrations were all recorded, backups counted what was left.
+   * Any table at all now means "not empty", and the refusal is an error (exit
+   * 1, on stderr), so a script around this cannot mistake it for success.
+   */
+  // schema.sql and seed.sql say `USE physio_clinic` themselves, so they write
+  // into physio_clinic whatever DB_NAME says. Any other name would make the
+  // check below look at one database while the schema replaced another.
+  if (config.database !== 'physio_clinic') {
+    console.error(c.yellow(`  ! DB_NAME is "${config.database}", but database/schema.sql creates and uses`))
+    console.error(c.yellow('    physio_clinic by name. Nothing was changed. Set DB_NAME=physio_clinic.\n'))
+    await connection.end()
+    process.exit(1)
+  }
+
   if (!RESET) {
     const [rows] = await connection.query(
-      `SELECT COUNT(*) AS n FROM information_schema.tables
-        WHERE table_schema = ? AND table_name = 'clinics'`,
+      `SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = ?`,
       [config.database]
     )
-    if (rows[0].n > 0) {
-      const [clinics] = await connection.query(
-        `SELECT COUNT(*) AS n FROM \`${config.database}\`.clinics`
-      )
-      if (clinics[0].n > 0) {
-        console.log(c.yellow(`  ! Database "${config.database}" already exists`))
-        console.log(c.yellow(`    and contains ${clinics[0].n} clinic(s).\n`))
-        console.log('    Running setup again would DELETE all of it, including')
-        console.log('    every clinic, patient and appointment.')
-        console.log(`\n    If that is genuinely what you want:  ${c.bold('npm run db:reset')}\n`)
-        await connection.end()
-        process.exit(0)
-      }
+    if (Number(rows[0].n) > 0) {
+      console.error(c.yellow(`  ! Database "${config.database}" already has ${rows[0].n} table(s). Nothing was changed.\n`))
+      console.error('    Setup only fills an EMPTY database. Running it over this one')
+      console.error('    would drop tables holding clinics, patients and appointments.')
+      console.error(`\n    On a laptop, to start the data over:  ${c.bold('npm run db:reset')}`)
+      console.error('    On a server: never — see DEPLOYMENT.md §7b.\n')
+      await connection.end()
+      process.exit(1)
     }
   }
 

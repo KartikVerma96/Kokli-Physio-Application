@@ -71,7 +71,7 @@
 //
 //  When they do NOT share a machine, set KOKLI_IMAGE_REPO to a registry path —
 //  ghcr.io/kartikverma96/kokli, or docker.io/<you>/kokli — and add the
-//  ghcr-credentials credential. Main then pushes there and the server pulls.
+//  kokli-ghcr credential. Main then pushes there and the server pulls.
 //  The deploy itself works the same either way: it uses the image if the
 //  server already has it, and pulls it only if not.
 //
@@ -91,13 +91,13 @@
 //      "suggested plugins" install. Docker Pipeline is needed only for
 //      KOKLI_FULL_SUITE_HERE=yes.
 //    * Credentials:
-//        github-read        Username with password: a GitHub user name and a
+//        kokli-github-read  Username with password: a GitHub user name and a
 //                           fine-grained token that can read this public
 //                           repository. Stage 3 asks GitHub with it, and the
 //                           Multibranch job should scan with it too; without
 //                           one, both share GitHub's 60 anonymous calls an hour.
 //        kokli-deploy-key   SSH Username with private key: the server's user
-//        ghcr-credentials   ONLY with a registry (see WHERE THE IMAGE GOES):
+//        kokli-ghcr         ONLY with a registry (see WHERE THE IMAGE GOES):
 //                           Username with password — the registry user and a
 //                           token allowed to push (for ghcr.io, a classic
 //                           personal access token with write:packages)
@@ -294,12 +294,13 @@ pipeline {
             // --pull fetches the newest base images, so security fixes in Debian
             // reach production without anybody remembering to ask.
             sh '''
-# The disk is shared with other people's databases. A build and its image take
-# a few GB for a while; below this, stopping is better than filling the disk.
-free_gb=$(( $(df -Pk . | awk 'NR==2 {print $4}') / 1024 / 1024 ))
-if [ "$free_gb" -lt 4 ]; then
-  echo "ERROR: only $free_gb GB free on this disk, so nothing is built. See what holds it: docker system df"
-  exit 1
+# Kokli's builds take turns, across branches and pull requests: two at once
+# would share the one capped builder, and hold both of this Jenkins' executors.
+# The lock goes when this step's shell does, however it ends.
+exec 8>>"$JENKINS_HOME/kokli-build.lock"
+if ! flock -n 8; then
+  echo "waiting for another Kokli build to finish with the builder"
+  flock -w 2400 8 || { echo "ERROR: another Kokli build has held the builder for 40 minutes."; exit 1; }
 fi
 
 # Kokli's own builder — see ON A JENKINS SHARED WITH OTHER PEOPLE at the top.
@@ -310,6 +311,17 @@ if ! { docker buildx inspect kokli >/dev/null 2>&1 || docker buildx create --nam
   echo "ERROR: could not make Kokli's own buildx builder (Docker's reason is above)."
   echo "       Docker's default builder is not used instead: it has no memory cap, and"
   echo "       its cache is shared with everyone else's on this server."
+  exit 1
+fi
+
+# The disk is shared with other people's databases. Kokli's own cache gives way
+# first: pruned to 5 GB, and further while that brings the disk back to 8 GB
+# free. Then the build needs 7 GB free, or it does not start: one whose base
+# images changed writes about five before anything is pruned again.
+docker buildx prune --builder kokli -f --max-used-space 5gb --min-free-space 8gb >/dev/null 2>&1 || true
+free_gb=$(( $(df -Pk . | awk 'NR==2 {print $4}') / 1024 / 1024 ))
+if [ "$free_gb" -lt 7 ]; then
+  echo "ERROR: only $free_gb GB free on this disk, so nothing is built. See what holds it: docker system df"
   exit 1
 fi
 
@@ -332,8 +344,10 @@ docker buildx build --builder kokli --load --pull --progress plain --platform "$
             //  when an abort or a timeout killed this shell before its trap ran.
             sh '''
 # No --name: Docker picks one and we keep the id. A fixed name collides when two
-# branch jobs (each with its own build numbers) run at once.
-SMOKE="$(docker run -d --label "kokli-ci=$BUILD_TAG" --memory=1g --platform "$BUILD_PLATFORM" -e AUTH_SECRET=smoke-test-only-not-a-real-secret -e PLATFORM_ENCRYPTION_KEY=smoke-test-only-not-a-real-key -e DB_HOST=127.0.0.1 "$BUILD_REF")"
+# branch jobs (each with its own build numbers) run at once. --network none: the
+# check asks from inside the container, and this code (npm's included) has no
+# business with any network on a shared server.
+SMOKE="$(docker run -d --network none --label "kokli-ci=$BUILD_TAG" --memory=1g --platform "$BUILD_PLATFORM" -e AUTH_SECRET=smoke-test-only-not-a-real-secret -e PLATFORM_ENCRYPTION_KEY=smoke-test-only-not-a-real-key -e DB_HOST=127.0.0.1 "$BUILD_REF")"
 trap 'docker rm -fv "$SMOKE" >/dev/null 2>&1 || true' EXIT
 
 body=""
@@ -368,8 +382,18 @@ echo "image boots, serves, and knows it is $IMAGE_TAG"
             //  stdin instead. -v on every removal: the MySQL image declares a
             //  data volume, and without -v each build left ~200 MB of it behind.
             sh '''
+# The same turn-taking as the build: a MySQL and an app container at a time.
+exec 8>>"$JENKINS_HOME/kokli-build.lock"
+flock -w 2400 8 || { echo "ERROR: another Kokli build has held its turn for 40 minutes."; exit 1; }
+free_gb=$(( $(df -Pk . | awk 'NR==2 {print $4}') / 1024 / 1024 ))
+if [ "$free_gb" -lt 2 ]; then
+  echo "ERROR: only $free_gb GB free on this disk, so the backup round trip does not start."
+  exit 1
+fi
+
+# --internal: the two containers reach each other, and nothing else at all.
 NET="kokli-ci-$BUILD_NUMBER-$EXECUTOR_NUMBER-$(date +%s)"
-docker network create --label "kokli-ci=$BUILD_TAG" "$NET" >/dev/null
+docker network create --internal --label "kokli-ci=$BUILD_TAG" "$NET" >/dev/null
 DB="$(docker run -d --label "kokli-ci=$BUILD_TAG" --network "$NET" --network-alias db --memory=1g -e MYSQL_ROOT_PASSWORD=ci-root -e MYSQL_DATABASE=physio_clinic -e MYSQL_USER=kokli -e MYSQL_PASSWORD=ci-kokli-password "$MYSQL_IMAGE" $MYSQL_FLAGS)"
 trap 'docker rm -fv "$DB" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true' EXIT
 
@@ -434,7 +458,7 @@ fi
             // in the Jenkins user's ~/.docker. --password-stdin keeps it off
             // the command line, where `ps` would show it.
             withCredentials([usernamePassword(
-              credentialsId: 'ghcr-credentials',
+              credentialsId: 'kokli-ghcr',
               usernameVariable: 'GHCR_USER',
               passwordVariable: 'GHCR_TOKEN'
             )]) {
@@ -642,6 +666,9 @@ done
           // One question per call. Exit codes: 0 passed, 1 failed, 2 still
           // running, 3 not started yet, 4 no answer, 5 the token was refused.
           def ask = '''
+# No trace: under Jenkins' `sh -x` every line below would be echoed, GitHub's
+# whole answer included, into the console, once a minute.
+set +x
 API="https://api.github.com/repos/$GITHUB_REPO/actions/workflows/ci.yml/runs?head_sha=$TESTED_COMMIT&event=push&branch=main&per_page=5"
 hdr="$(mktemp)"
 out="$(mktemp)"
@@ -651,7 +678,7 @@ trap 'rm -f "$hdr" "$out"' EXIT
 echo "Authorization: Bearer $GH_TOKEN" > "$hdr"
 code="$(curl -sS --max-time 20 -o "$out" -w '%{http_code}' -H @"$hdr" -H 'Accept: application/vnd.github+json' "$API" || true)"
 if [ "$code" = 401 ]; then
-  echo "GitHub refused the github-read credential (401): its token is wrong or has expired."
+  echo "GitHub refused the kokli-github-read credential (401): its token is wrong or has expired."
   exit 5
 fi
 if [ "$code" != 200 ]; then
@@ -662,11 +689,10 @@ if [ "$code" != 200 ]; then
 fi
 # Newest run first. Within a run, its own status, conclusion and address come
 # before anything nested in it.
-body="$(cat "$out")"
-total="$(printf '%s' "$body" | grep -o '"total_count": *[0-9]*' | head -1 | grep -o '[0-9]*$' || true)"
-status="$(printf '%s' "$body" | grep -o '"status": *"[a-z_]*"' | head -1 | cut -d'"' -f4)"
-conclusion="$(printf '%s' "$body" | grep -o '"conclusion": *"[a-z_]*"' | head -1 | cut -d'"' -f4)"
-url="$(printf '%s' "$body" | grep -o '"html_url": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+total="$(grep -o '"total_count": *[0-9]*' "$out" | head -1 | grep -o '[0-9]*$' || true)"
+status="$(grep -o '"status": *"[a-z_]*"' "$out" | head -1 | cut -d'"' -f4)"
+conclusion="$(grep -o '"conclusion": *"[a-z_]*"' "$out" | head -1 | cut -d'"' -f4)"
+url="$(grep -o '"html_url": *"[^"]*"' "$out" | head -1 | cut -d'"' -f4)"
 if [ "${total:-0}" = 0 ]; then
   echo "  $(date +%H:%M:%S)  not started yet"
   exit 3
@@ -688,7 +714,7 @@ exit 2
           for (int asked = 1; asked <= 31 && verdict == 'waiting'; asked++) {
             def rc = 4
             node {
-              withCredentials([usernamePassword(credentialsId: 'github-read', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+              withCredentials([usernamePassword(credentialsId: 'kokli-github-read', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
                 rc = sh(script: ask, returnStatus: true)
               }
             }
@@ -711,7 +737,7 @@ exit 2
             error("GitHub's CI run did not pass on this commit, so nothing is deployed.")
           }
           if (verdict == 'refused') {
-            error('Fix the github-read credential (DEPLOYMENT.md §7c), then build this commit again.')
+            error('Fix the kokli-github-read credential (DEPLOYMENT.md §7c), then build this commit again.')
           }
           if (verdict == 'never started') {
             error('After 10 minutes GitHub has not started a CI run for this push. ' +
@@ -754,7 +780,7 @@ exit 2
           ensureImageEnv()
           def creds = [sshUserPrivateKey(credentialsId: 'kokli-deploy-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]
           if (env.PUSH == 'yes') {
-            creds.add(usernamePassword(credentialsId: 'ghcr-credentials', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN'))
+            creds.add(usernamePassword(credentialsId: 'kokli-ghcr', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN'))
           }
           withCredentials(creds) {
             // `remote` is a function rather than a variable holding the ssh
@@ -773,13 +799,17 @@ send() {
 #    upgrade of the proxy dropped it.)
 remote bash -s < deploy/server/preflight.sh
 
-# 2. This commit's compose files, beside the live ones as *.new. The deploy
-#    checks them on the server and swaps them in with the image — and puts the
-#    old ones back if it rolls back. The server has no git checkout: it needs
-#    these and .env.local, the one file Jenkins never touches.
-send docker-compose.yml kokli/docker-compose.yml.new
+# 2. Everything this deploy brings is named after its run, so a deploy still
+#    running from an aborted build is never handed this one's files: the
+#    script, and this commit's compose files, which the deploy checks on the
+#    server and swaps in with the image — putting the old ones back if it rolls
+#    back. The server has no git checkout: it needs these and .env.local, the
+#    one file Jenkins never touches.
+RUN="$(date -u +%Y%m%d-%H%M%S)-b$BUILD_NUMBER"
+send deploy/server/deploy.sh "kokli/deploy-$RUN.sh"
+send docker-compose.yml "kokli/deploy-$RUN.compose.yml"
 if remote test -f kokli/docker-compose.override.yml </dev/null; then
-  send deploy/server/docker-compose.override.yml kokli/docker-compose.override.yml.new
+  send deploy/server/docker-compose.override.yml "kokli/deploy-$RUN.override.yml"
 fi
 
 # 3. With a registry: let the server pull from it. Through stdin, so the token
@@ -792,11 +822,7 @@ if [ "$PUSH" = yes ]; then
   echo "server logged in to $REGISTRY"
 fi
 
-# 4. The deploy: started detached on the server, then followed. A file of its
-#    own per deploy, so a deploy still running from an aborted build is never
-#    rewritten under it.
-RUN="$(date -u +%Y%m%d-%H%M%S)-b$BUILD_NUMBER"
-send deploy/server/deploy.sh "kokli/deploy-$RUN.sh"
+# 4. The deploy: started detached on the server, then followed.
 PID="$(remote bash "kokli/deploy-$RUN.sh" --start "$IMAGE_REF" "$IMAGE_TAG" "$RUN" "$REGISTRY" </dev/null || true)"
 if [ -z "$PID" ]; then
   echo "ERROR: the deploy did not start on the server. What it wrote:"
@@ -805,26 +831,59 @@ if [ -z "$PID" ]; then
 fi
 echo "deploying on the server: process $PID, log ~/kokli/deploy-$RUN.log"
 remote "tail -n +1 -f --pid=$PID kokli/deploy-$RUN.log" </dev/null || true
+
+# One failed ssh connection (ssh's own exit code, 255) says nothing about the
+# deploy, which carries on regardless: ask again, for up to five minutes,
+# before giving up. fetch: run a command on the server; its exit code, or 255
+# when the server could not be asked. running: 0 the deploy is still running
+# there, 1 it has ended, 2 the server could not be asked.
+fetch() {
+  tries=0
+  while :; do
+    if remote "$1" </dev/null; then return 0; else said=$?; fi
+    [ "$said" = 255 ] || return "$said"
+    tries=$((tries + 1))
+    [ "$tries" -lt 20 ] || return 255
+    sleep 15
+  done
+}
+running() {
+  # `|| exit 1`: once the process has gone, so has its /proc entry, and grep
+  # would say 2 — which must not read as "could not ask".
+  if fetch "grep -q deploy-$RUN /proc/$PID/cmdline 2>/dev/null || exit 1"; then return 0; else said=$?; fi
+  [ "$said" = 255 ] && return 2
+  return 1
+}
 lost=no
-while remote "grep -q deploy-$RUN /proc/$PID/cmdline 2>/dev/null" </dev/null; do
-  lost=yes
-  echo "(the log stream broke off; the deploy is still running on the server - waiting for it)"
-  sleep 15
+while :; do
+  if running; then
+    lost=yes
+    echo "(the log stream broke off; the deploy is still running on the server - waiting for it)"
+    sleep 15
+  else
+    ended=$?
+    break
+  fi
 done
-remote "cat kokli/deploy-$RUN.log" </dev/null > deploy-remote.log || true
+if [ "$ended" = 2 ]; then
+  echo "ERROR: lost contact with the server. The deploy may well still be running there:"
+  echo "       read ~/kokli/deploy-$RUN.log and ~/kokli/deploy-$RUN.result on the server before touching anything."
+  exit 1
+fi
+fetch "cat kokli/deploy-$RUN.log" > deploy-remote.log || true
 if [ "$lost" = yes ]; then cat deploy-remote.log; fi
 
 # Done means both: exit code 0, and the last line the deploy prints only once
 # the new version is live and healthy.
-rc="$(remote "cat kokli/deploy-$RUN.result 2>/dev/null" </dev/null || true)"
-if [ "$rc" = 0 ] && grep -qxF "KOKLI-DEPLOYED $IMAGE_REF" deploy-remote.log; then
+result="$(fetch "cat kokli/deploy-$RUN.result 2>/dev/null" || true)"
+if [ "$result" = 0 ] && grep -qxF "KOKLI-DEPLOYED $IMAGE_REF" deploy-remote.log; then
   echo "the server reports $IMAGE_REF live and healthy"
-elif [ -z "$rc" ]; then
+elif [ -z "$result" ]; then
   echo "ERROR: the deploy on the server stopped without finishing (killed, or the machine restarted)."
   echo "       See what is running: on the server, cd ~/kokli && docker compose ps"
   exit 1
 else
-  echo "ERROR: the deploy on the server did not go live (exit $rc) - its log is above, and in ~/kokli/deploy-$RUN.log."
+  echo "ERROR: the deploy on the server did not go live (exit $result) - its log is above, and in ~/kokli/deploy-$RUN.log."
   exit 1
 fi
 '''

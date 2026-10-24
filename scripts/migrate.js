@@ -6,6 +6,8 @@
  *      npm run db:migrate
  *      npm run db:migrate -- --pending    only list what has not been applied;
  *                                         exits 3 if anything is pending
+ *      npm run db:migrate -- --strict     as every deploy runs it: an error is
+ *                                         an error, even an "already done" one
  *
  *  Applies every file in database/migrations/ that has not been applied yet, in
  *  filename order, and records what it did.
@@ -102,12 +104,45 @@ const ALREADY_DONE = new Set([
   'ER_DUP_FIELDNAME', // column exists
   'ER_TABLE_EXISTS_ERROR', // table exists
   'ER_DUP_KEYNAME', // index exists
-  'ER_DUP_ENTRY', // seed row exists
   'ER_CANT_DROP_FIELD_OR_KEY', // dropping something already dropped
   'ER_FK_DUP_NAME', // foreign key exists
   'ER_CHECK_CONSTRAINT_DUP_NAME', // CHECK constraint exists
   'ER_DUP_CHECK_CONSTRAINT_NAME',
 ])
+
+/**
+ * A duplicate key means "the seed row is already there" only for an INSERT.
+ * For anything else — an ALTER adding a unique key over rows that already
+ * repeat — it means the statement failed outright, and recording it as done
+ * would leave the guard it was meant to add missing for good.
+ */
+function alreadyDone(error, statement) {
+  if (ALREADY_DONE.has(error.code)) return true
+  return error.code === 'ER_DUP_ENTRY' && /^INSERT\b/i.test(statement)
+}
+
+/**
+ * --strict: nothing counts as "already done". Every deploy runs this way: on a
+ * live database a statement that is already in the schema is not expected,
+ * and MySQL rejects a multi-part ALTER whole when one part exists — so "already
+ * done" can mean "half done". On a fresh database built from schema.sql (a
+ * new server, CI) the ordinary mode is right: everything is already there.
+ */
+const STRICT = process.argv.includes('--strict')
+
+/**
+ * MySQL quotes the offending VALUE in some errors — "Duplicate entry '<value>'
+ * for key …", "Incorrect date value: '<value>' for column …" — and on a live
+ * database that value is a patient's name, phone or note. The deploy's output
+ * goes into Jenkins, which other people read, so the value never leaves this
+ * process: the key or column name stays, everything between the quotes goes.
+ * Greedy on purpose: MySQL does not escape a quote inside the value.
+ */
+function maskValues(message) {
+  const text = String(message || '')
+  const named = text.replace(/'[\s\S]*' (for (?:key|column) '[^']*')/, "'…' $1")
+  return named !== text ? named : text.replace(/'[\s\S]*'/, "'…'")
+}
 
 /**
  * --pending: what would run, without running it and without writing anything —
@@ -146,6 +181,12 @@ async function main() {
     database: process.env.DB_NAME,
     multipleStatements: false,
   })
+
+  // A schema change waits for every open transaction on its table — and while
+  // it waits, every new query on that table queues behind it, on a site that
+  // is still serving. Thirty seconds, then it gives up: the deploy stops before
+  // its swap, the old version keeps serving, and the next try finds it quiet.
+  await connection.query('SET SESSION lock_wait_timeout = 30')
 
   if (process.argv.includes('--pending')) {
     const files = fs.existsSync(MIGRATIONS_DIR)
@@ -209,14 +250,20 @@ async function main() {
         await connection.query(statement)
         ran++
       } catch (error) {
-        if (ALREADY_DONE.has(error.code)) {
+        const done = alreadyDone(error, statement)
+        if (done && !STRICT) {
           // Recorded anyway: the database is in the state this statement wanted,
           // which is the only thing that matters.
           console.log(`      (already done: ${error.code})`)
           inPlace++
         } else {
           console.error(`\n✗ ${file}, statement ${i + 1}:`)
-          console.error(`  ${error.code} — ${error.sqlMessage}`)
+          console.error(`  ${error.code} — ${maskValues(error.sqlMessage)}`)
+          if (done) {
+            console.error('\n  (--strict) On a live database this may mean the statement ran only in part.')
+            console.error('  Check the schema by hand. If it is as the statement wants, record it with')
+            console.error('  `node scripts/migrate.js` once, without --strict.')
+          }
           console.error(`\n  ${statement.replace(/\s+/g, ' ').slice(0, 200)}\n`)
           await connection.end()
           process.exit(1)
@@ -240,6 +287,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('\n✗ Migration failed:', error.message, '\n')
+  console.error('\n✗ Migration failed:', maskValues(error.message), '\n')
   process.exit(1)
 })

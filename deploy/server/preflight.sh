@@ -46,10 +46,14 @@ if [ -f kokli/docker-compose.override.yml ]; then
   # container, not in any file, so re-creating the proxy — an upgrade — drops
   # it, and every Kokli address answers 502. Put it back. --gw-priority -1:
   # this network must never become the proxy's way out to the internet.
+  # Only a RUNNING proxy: Docker accepts a network for a stopped container
+  # without checking it, and a stopped proxy is somebody's maintenance.
   if [ -f kokli/.proxy-container ]; then
     proxy="$(cat kokli/.proxy-container)"
     if ! docker container inspect "$proxy" >/dev/null 2>&1; then
       echo "WARNING: the proxy container $proxy, named in ~/kokli/.proxy-container, does not exist here."
+    elif [ "$(docker container inspect -f '{{.State.Running}}' "$proxy")" != true ]; then
+      echo "WARNING: the proxy container $proxy is not running, so nobody can reach Kokli until it is."
     elif ! docker container inspect -f '{{range $k, $v := .NetworkSettings.Networks}} {{$k}} {{end}}' "$proxy" | grep -q ' kokli-network '; then
       docker network connect --gw-priority -1 kokli-network "$proxy"
       echo "reconnected $proxy to kokli-network"

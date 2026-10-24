@@ -56,7 +56,7 @@ command -v openssl >/dev/null || die "openssl is missing: sudo apt install opens
 command -v crontab >/dev/null || die "cron is missing: sudo apt install cron"
 command -v flock   >/dev/null || die "flock is missing: sudo apt install util-linux"
 for f in docker-compose.yml deploy/server/docker-compose.override.yml deploy/server/env.local.example \
-         deploy/server/check-env.js deploy/kokli-db/docker-compose.yml deploy/kokli-db/init/01-grants.sql; do
+         deploy/server/check-env.js deploy/server/proxy-link.sh deploy/kokli-db/docker-compose.yml deploy/kokli-db/init/01-grants.sql; do
   [ -f "$REPO/$f" ] || die "Run this from a copy of the repository: $f is missing."
 done
 
@@ -82,12 +82,18 @@ mkdir -p "$APP_DIR/backups" "$DB_DIR/init"
 step "Networks"
 # -----------------------------------------------------------------------------
 if docker network inspect kokli-network >/dev/null 2>&1; then say "kokli-network exists"
-else docker network create kokli-network >/dev/null && say "created kokli-network"; fi
+else
+  docker network create kokli-network >/dev/null || die "could not create kokli-network (Docker's reason is above)."
+  say "created kokli-network"
+fi
 
 # --internal: containers on it can reach each other and nothing else. MySQL is
 # only on this one, so it has no route to or from the internet at all.
 if docker network inspect kokli-internal >/dev/null 2>&1; then say "kokli-internal exists"
-else docker network create --internal kokli-internal >/dev/null && say "created kokli-internal (internal: no internet)"; fi
+else
+  docker network create --internal kokli-internal >/dev/null || die "could not create kokli-internal (Docker's reason is above)."
+  say "created kokli-internal (internal: no internet)"
+fi
 [ "$(docker network inspect kokli-internal -f '{{.Internal}}')" = true ] \
   || say "WARNING: kokli-internal exists but is NOT internal — MySQL would have internet access. Recreate it with --internal."
 
@@ -108,7 +114,9 @@ if docker container inspect "$PROXY_CONTAINER" >/dev/null 2>&1; then
     say "$PROXY_CONTAINER is already on kokli-network"
   else
     # GW_PRIORITY is two words, or none: unquoted on purpose.
-    docker network connect $GW_PRIORITY kokli-network "$PROXY_CONTAINER" && say "connected $PROXY_CONTAINER to kokli-network (it keeps running)"
+    docker network connect $GW_PRIORITY kokli-network "$PROXY_CONTAINER" \
+      || die "could not connect $PROXY_CONTAINER to kokli-network (Docker's reason is above)."
+    say "connected $PROXY_CONTAINER to kokli-network (it keeps running)"
   fi
   printf '%s\n' "$PROXY_CONTAINER" > "$APP_DIR/.proxy-container"
 else
@@ -121,7 +129,10 @@ fi
 step "Database volume"
 # -----------------------------------------------------------------------------
 if docker volume inspect kokli-db-data >/dev/null 2>&1; then say "kokli-db-data exists — left exactly as it is"
-else docker volume create kokli-db-data >/dev/null && say "created kokli-db-data"; fi
+else
+  docker volume create kokli-db-data >/dev/null || die "could not create the volume kokli-db-data (Docker's reason is above)."
+  say "created kokli-db-data"
+fi
 
 # -----------------------------------------------------------------------------
 step "Folders and files"
@@ -136,8 +147,13 @@ step "Folders and files"
 for pair in "docker-compose.yml:docker-compose.yml" "deploy/server/docker-compose.override.yml:docker-compose.override.yml"; do
   from="${pair%%:*}"; to="${pair#*:}"
   if [ -f "$APP_DIR/$to" ]; then say "~/kokli/$to exists — kept (deploys keep it current)"
-  else install -m 644 "$REPO/$from" "$APP_DIR/$to" && say "installed ~/kokli/$to"; fi
+  else
+    install -m 644 "$REPO/$from" "$APP_DIR/$to" || die "could not install ~/kokli/$to."
+    say "installed ~/kokli/$to"
+  fi
 done
+# Kokli's own, refreshed on every run: the cron line below runs it.
+install -m 755 "$REPO/deploy/server/proxy-link.sh" "$APP_DIR/proxy-link.sh" || die "could not install ~/kokli/proxy-link.sh."
 
 # The database's own definition is changed only by a person, on purpose:
 # re-creating MySQL from a different definition — another server version, a
@@ -260,17 +276,22 @@ step "Scheduled jobs (crontab)"
 # under the same lock a deploy takes (~/kokli/.kokli.lock): a deploy swapping
 # the app's container can neither kill one half-way nor start under one. The
 # container name ends in the cron shell's process id — unique, and a fixed
-# name left behind by a crash would block every later night.
+# name left behind by a crash would block every later night. Each run starts
+# with the date in backup.log, and --verbose makes the lock say how long it
+# waited — or that it gave up after an hour, so a skipped night leaves a trace.
 #
 # The two HTTP jobs run INSIDE the app container, with Node's fetch against its
 # own port: CRON_SECRET never leaves the container's environment (so it is not
 # in the crontab), and nothing depends on DNS, TLS or the proxy's 90-second
 # timeout. A run during a deploy's few-second container swap simply fails, and
 # the next one catches up.
+#
+# The proxy line runs ~/kokli/proxy-link.sh, which connects nothing unless the
+# network exists and the proxy is running and off it (see the script).
 CRON_BLOCK="$(cat <<'CRON'
 # >>> kokli (managed by deploy/server/bootstrap.sh — edit there, not here) >>>
-30 20 * * *  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-nightly-$$ kokli node scripts/backup.js < /dev/null >> $HOME/kokli/backup.log 2>&1
-30 21 * * 6  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-verify-$$ kokli node scripts/backup.js --verify < /dev/null >> $HOME/kokli/backup.log 2>&1
+30 20 * * *  cd $HOME/kokli && date -u >> backup.log && flock --verbose -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-nightly-$$ kokli node scripts/backup.js < /dev/null >> backup.log 2>&1
+30 21 * * 6  cd $HOME/kokli && date -u >> backup.log && flock --verbose -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-verify-$$ kokli node scripts/backup.js --verify < /dev/null >> backup.log 2>&1
 0 21 * * *   docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/subscriptions',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'subscriptions',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
 */10 * * * * docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/whatsapp',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'whatsapp',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
 PROXY_LINE
@@ -278,8 +299,7 @@ PROXY_LINE
 CRON
 )"
 if [ -f "$APP_DIR/.proxy-container" ]; then
-  proxy_line="*/5 * * * *  docker network connect ${GW_PRIORITY:+$GW_PRIORITY }kokli-network $(cat "$APP_DIR/.proxy-container") >/dev/null 2>&1 || true"
-  CRON_BLOCK="${CRON_BLOCK/PROXY_LINE/$proxy_line}"
+  CRON_BLOCK="${CRON_BLOCK/PROXY_LINE/*/5 * * * *  /bin/sh \$HOME/kokli/proxy-link.sh >> \$HOME/kokli/cron.log 2>&1}"
 else
   CRON_BLOCK="${CRON_BLOCK/PROXY_LINE/# (no proxy container was found, so nothing reconnects one)}"
 fi
@@ -299,6 +319,22 @@ if ! crontab -l > "$tab" 2> "$tab.err"; then
   fi
 fi
 rm -f "$tab.err"
+
+# The block is removed from its start marker to its end marker. With a marker
+# missing or doubled, that would also remove every line after it — other
+# people's jobs — so a damaged block stops the run instead.
+starts="$(grep -c '^# >>> kokli ' "$tab" || true)"
+ends="$(grep -c '^# <<< kokli <<<$' "$tab" || true)"
+if [ "$starts" != 0 ] || [ "$ends" != 0 ]; then
+  # `|| true`: under pipefail a marker that is missing would end the run right
+  # here, silently, instead of with the message below.
+  first_start="$(grep -n '^# >>> kokli ' "$tab" | head -1 | cut -d: -f1 || true)"
+  first_end="$(grep -n '^# <<< kokli <<<$' "$tab" | head -1 | cut -d: -f1 || true)"
+  if [ "$starts" != 1 ] || [ "$ends" != 1 ] || [ "${first_start:-0}" -ge "${first_end:-0}" ]; then
+    rm -f "$tab"
+    die "the kokli block in $(whoami)'s crontab is damaged (start markers: $starts, end markers: $ends). Fix it with crontab -e; the crontab was left exactly as it is."
+  fi
+fi
 if ! { sed '/^# >>> kokli /,/^# <<< kokli <<<$/d' "$tab"; printf '%s\n' "$CRON_BLOCK"; } | crontab -; then
   rm -f "$tab"
   die "crontab refused the new block — see its message above."

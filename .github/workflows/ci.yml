@@ -29,6 +29,7 @@ jobs:
   check:
     name: Lint and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,6 +47,8 @@ jobs:
   test:
     name: Full suite
     runs-on: ubuntu-latest
+    # Jenkins waits up to 30 minutes for this run; a hung run must end first.
+    timeout-minutes: 20
     # India time, as in production (TZ in the Dockerfile, +05:30 on MySQL). A
     # suite running UTC against UTC agrees with itself, and so can never notice
     # a time-zone bug.
@@ -129,8 +132,9 @@ jobs:
         run: |
           npm run dev > /tmp/dev.log 2>&1 &
           code=none
-          for i in $(seq 1 180); do
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 http://localhost:3000/ || true)"
+          deadline=$(( $(date +%s) + 180 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:3000/ || true)"
             case "$code" in 2??|3??) exit 0 ;; esac
             sleep 1
           done
@@ -148,7 +152,7 @@ jobs:
           for p in / /login /register /forgot-password /admin /admin/services \
                    /admin/settings/branding /admin/settings/whatsapp /admin/billing \
                    /dashboard/profile /platform /platform/errors; do
-            curl -s -o /dev/null -H 'Host: aarogya.localhost' "http://localhost:3000$p" || true
+            curl -s -o /dev/null --max-time 120 -H 'Host: aarogya.localhost' "http://localhost:3000$p" || true
           done
 
       - name: npm test
