@@ -123,14 +123,23 @@ jobs:
       - name: Create the schema and seed
         run: npm run db:setup
 
+      # Up to three minutes: the dev server compiles the first page it is asked
+      # for, and a slow runner has taken longer than ninety seconds.
       - name: Start the server
         run: |
           npm run dev > /tmp/dev.log 2>&1 &
-          for i in $(seq 1 90); do
-            curl -sf http://localhost:3000/ >/dev/null && exit 0
+          code=none
+          for i in $(seq 1 180); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 http://localhost:3000/ || true)"
+            case "$code" in 2??|3??) exit 0 ;; esac
             sleep 1
           done
-          echo "server never came up:"; cat /tmp/dev.log; exit 1
+          echo "server never came up (last answer: HTTP $code):"; cat /tmp/dev.log
+          # The same lines as an annotation: annotations are public, the raw log
+          # needs admin rights to read.
+          msg="$(tail -n 40 /tmp/dev.log | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
+          echo "::error title=The dev server never came up (last answer HTTP $code)::$msg"
+          exit 1
 
       # Warm every page so the dev server compiles each route and writes its
       # server actions into the manifest the suites read.
