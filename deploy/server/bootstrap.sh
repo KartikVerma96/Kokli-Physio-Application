@@ -97,11 +97,18 @@ else docker network create --internal kokli-internal >/dev/null && say "created 
 # `docker network connect` lasts until the proxy's container is RE-CREATED —
 # which is what upgrading it does — so its name is written down for the two
 # things that put the link back: every deploy's preflight, and a cron line.
+#
+# --gw-priority -1 (Docker 28 and later): with several networks, one of them is
+# the proxy's way out to the internet, and adding a network must never change
+# which. Older Docker has no such flag, and keeps the first network by name.
+GW_PRIORITY=""
+if docker network connect --help 2>/dev/null | grep -q -- '--gw-priority'; then GW_PRIORITY="--gw-priority -1"; fi
 if docker container inspect "$PROXY_CONTAINER" >/dev/null 2>&1; then
   if docker container inspect -f '{{range $k, $v := .NetworkSettings.Networks}} {{$k}} {{end}}' "$PROXY_CONTAINER" | grep -q ' kokli-network '; then
     say "$PROXY_CONTAINER is already on kokli-network"
   else
-    docker network connect kokli-network "$PROXY_CONTAINER" && say "connected $PROXY_CONTAINER to kokli-network (it keeps running)"
+    # GW_PRIORITY is two words, or none: unquoted on purpose.
+    docker network connect $GW_PRIORITY kokli-network "$PROXY_CONTAINER" && say "connected $PROXY_CONTAINER to kokli-network (it keeps running)"
   fi
   printf '%s\n' "$PROXY_CONTAINER" > "$APP_DIR/.proxy-container"
 else
@@ -262,8 +269,8 @@ step "Scheduled jobs (crontab)"
 # the next one catches up.
 CRON_BLOCK="$(cat <<'CRON'
 # >>> kokli (managed by deploy/server/bootstrap.sh — edit there, not here) >>>
-30 20 * * *  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-nightly-$$ app node scripts/backup.js < /dev/null >> $HOME/kokli/backup.log 2>&1
-30 21 * * 6  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-verify-$$ app node scripts/backup.js --verify < /dev/null >> $HOME/kokli/backup.log 2>&1
+30 20 * * *  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-nightly-$$ kokli node scripts/backup.js < /dev/null >> $HOME/kokli/backup.log 2>&1
+30 21 * * 6  cd $HOME/kokli && flock -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-verify-$$ kokli node scripts/backup.js --verify < /dev/null >> $HOME/kokli/backup.log 2>&1
 0 21 * * *   docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/subscriptions',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'subscriptions',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
 */10 * * * * docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/whatsapp',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'whatsapp',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
 PROXY_LINE
@@ -271,16 +278,27 @@ PROXY_LINE
 CRON
 )"
 if [ -f "$APP_DIR/.proxy-container" ]; then
-  proxy_line="*/5 * * * *  docker network connect kokli-network $(cat "$APP_DIR/.proxy-container") >/dev/null 2>&1 || true"
+  proxy_line="*/5 * * * *  docker network connect ${GW_PRIORITY:+$GW_PRIORITY }kokli-network $(cat "$APP_DIR/.proxy-container") >/dev/null 2>&1 || true"
   CRON_BLOCK="${CRON_BLOCK/PROXY_LINE/$proxy_line}"
 else
   CRON_BLOCK="${CRON_BLOCK/PROXY_LINE/# (no proxy container was found, so nothing reconnects one)}"
 fi
 
-# `crontab -l` fails when this user has no crontab yet; that is an empty one,
-# not an error. Everything outside the marked block goes back byte for byte.
+# Everything outside the marked block goes back byte for byte. `crontab -l`
+# fails when this user has no crontab yet — that is an empty one — but any
+# OTHER failure stops here: treated as empty, it would replace whatever this
+# account's crontab holds (other people's jobs included) with Kokli's block.
 tab="$(mktemp)"
-crontab -l > "$tab" 2>/dev/null || : > "$tab"
+if ! crontab -l > "$tab" 2> "$tab.err"; then
+  if grep -qi 'no crontab for' "$tab.err"; then
+    : > "$tab"
+  else
+    cat "$tab.err" >&2
+    rm -f "$tab" "$tab.err"
+    die "could not read this user's crontab (above), so it was left exactly as it is."
+  fi
+fi
+rm -f "$tab.err"
 if ! { sed '/^# >>> kokli /,/^# <<< kokli <<<$/d' "$tab"; printf '%s\n' "$CRON_BLOCK"; } | crontab -; then
   rm -f "$tab"
   die "crontab refused the new block — see its message above."

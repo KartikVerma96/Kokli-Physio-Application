@@ -266,8 +266,8 @@ needed on it except DNS (§2). Once this section is done, deploying is
 git push ──► GitHub ──┬─ Actions: lint, build, the full suite (.github/workflows/ci.yml)
                       └─ webhook ──► Jenkins, on the server itself
                                        1  image: lint + build, boot it, migrate + back up + restore the real schema
-                                       3  wait for GitHub's "Full suite" on this exact commit     ◄─ main only
-                                       4  deploy: backup → migrations → swap → health → (roll back)
+                                       3  wait for GitHub's CI run of this exact push            ◄─ main only
+                                       4  deploy, run on the server itself: backup → migrations → swap → health → (roll back)
 
 patients ──► Nginx Proxy Manager :443 ──kokli-network──► kokli (app) ──kokli-internal──► kokli-mysql
 ```
@@ -285,19 +285,29 @@ already there:
 - **Builds** go through a `docker buildx` builder of Kokli's own, capped at 3 GB and
   two cores, so a build cannot push production out of memory. Its cache is Kokli's
   alone and pruned to 5 GB after every build; nobody else's build cache is touched.
+  If that builder cannot be made, the build stops rather than use Docker's shared one.
+- **Disk**: a build stops before it starts with less than 4 GB free, a deploy with
+  less than 2 GB — the disk is shared with other people's databases. The server keeps
+  the three versions deployed last, not more.
 - **Clean-up** selects only what Kokli made — containers and networks by the label
   `kokli-ci`, images by the repository name `kokli` or Kokli's own label. Never
   another image, volume or cache.
 - **Ports**: Kokli publishes none on the host. The proxy reaches the app over
   `kokli-network`; health checks run inside the container.
+- **Names**: the app answers on `kokli-network` only to `kokli` — its Compose service
+  has that name too, not the usual `app`, which could shadow somebody else's `app`
+  for the proxy.
 - **Jenkins**: the deploy's settings are global properties named `KOKLI_…`, which no
   other job reads. No code from npm runs in a Jenkins Pipeline container — those are
   handed the host's Docker and all of Jenkins' home — only inside `docker build`'s
   sandbox and in plain containers that get neither. A build holds one executor at a
-  time, and none while it waits for GitHub.
-- **The proxy** gets one more network, `kokli-network`, and nothing else changes in
-  it; the friend's proxy hosts are not touched.
-- **The crontab** gets one marked block; every other line stays as it is.
+  time, and none while it waits for GitHub. A failed deploy's app log stays on the
+  server: Jenkins' build log, which other people read, never gets a line of it.
+- **The proxy** gets one more network, `kokli-network`, connected with
+  `--gw-priority -1` so it is never the proxy's way out to the internet; nothing else
+  changes in it, and the friend's proxy hosts are not touched.
+- **The crontab** gets one marked block; every other line stays as it is, and if the
+  crontab cannot be read, bootstrap stops instead of writing it.
 
 What lives where on the server:
 
@@ -309,6 +319,8 @@ What lives where on the server:
   .env.local                   production secrets — mode 600, never in git or Jenkins
   .env                         KOKLI_IMAGE=kokli:<commit> — what is live; deploys write it
   .deployed                    the images deployed, newest last
+  deploy-<run>.sh / .log / .result   each deploy: the script Jenkins sent, its log, its exit
+                               code (kept a month); deploy-<run>-app.log, mode 600, if it failed
   .proxy-container             the proxy's container name, for putting its network back
   .kokli.lock                  taken by every deploy, the nightly backup and the restore test
   backups/                     the nightly dumps (newest 30), each with its .counts.json
@@ -372,8 +384,15 @@ The first image is built on the server from the clone; Jenkins builds every one 
 it. Run these in order, before Nginx Proxy Manager sends anyone to the site:
 
 ```bash
+# Built in a builder of its own, capped like Jenkins' (3 GB), and removed with its
+# whole cache afterwards: Docker's default builder has no cap, and its cache is
+# shared with everyone else's on this server.
 cd ~/kokli-src && TAG=$(git rev-parse --short=12 HEAD)
-docker build -t kokli:$TAG --build-arg NEXT_PUBLIC_SITE_URL=https://kokli.in --build-arg KOKLI_VERSION=$TAG .
+docker buildx create --name kokli-setup --driver docker-container \
+  --driver-opt memory=3g --driver-opt memory-swap=3g
+docker buildx build --builder kokli-setup --load -t kokli:$TAG \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://kokli.in --build-arg KOKLI_VERSION=$TAG .
+docker buildx rm kokli-setup
 
 # Which image ~/kokli runs — written into .env, the file Compose reads by itself.
 # Not exported: a variable in your shell would outrank .env in every later
@@ -382,11 +401,11 @@ echo "KOKLI_IMAGE=kokli:$TAG" > ~/kokli/.env && cd ~/kokli
 
 # 1. Schema, the three plans and the platform owner — plus the demo clinic, removed
 #    in step 3. Its output lists the demo passwords, so it is kept off the screen.
-docker compose run --rm --no-deps -T app node scripts/setup-db.js </dev/null | grep 'Database ready'
+docker compose run --rm --no-deps -T kokli node scripts/setup-db.js </dev/null | grep 'Database ready'
 
 # 2. Every migration, NOW, while the database is empty. They are recorded as done;
 #    run for the first time later, on live data, some would rebuild live tables.
-docker compose run --rm --no-deps -T app node scripts/migrate.js </dev/null
+docker compose run --rm --no-deps -T kokli node scripts/migrate.js </dev/null
 
 # 3. The demo clinic out: its logins are in this repository, so on a public server
 #    anyone could sign in as the admin of a live clinic. Refuses to run if any real
@@ -397,12 +416,12 @@ docker exec -i kokli-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot 
 # 4. The platform owner's password: long, random, into a file only you can read.
 #    The seeded owner123 is public. --stdin keeps it out of every command line.
 ( umask 077; openssl rand -base64 24 > ~/kokli/OWNER-PASSWORD.txt )
-docker compose run --rm --no-deps -T app node scripts/set-password.js owner@kokli.in --stdin \
+docker compose run --rm --no-deps -T kokli node scripts/set-password.js owner@kokli.in --stdin \
   < ~/kokli/OWNER-PASSWORD.txt
 
 # 5. A first backup, and proof that it restores.
-docker compose run --rm --no-deps -T app node scripts/backup.js </dev/null
-docker compose run --rm --no-deps -T app node scripts/backup.js --verify </dev/null
+docker compose run --rm --no-deps -T kokli node scripts/backup.js </dev/null
+docker compose run --rm --no-deps -T kokli node scripts/backup.js --verify </dev/null
 
 # 6. Start it, and ask it how it is.
 docker compose up -d --no-build
@@ -410,8 +429,8 @@ docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>r.t
 #    → {"ok":true,"version":"<the commit>"}
 ```
 
-This one build uses Docker's default builder; every later one is Jenkins', in Kokli's
-own. Signing in comes at the end of §7d, once the proxy is in place.
+Every later image is Jenkins', in Kokli's own builder. Signing in comes at the end of
+§7d, once the proxy is in place.
 
 Never run `npm run db:reset` (or `setup-db --reset`) on this server: it does not
 recreate the database, and half-empties a current one.
@@ -445,8 +464,8 @@ is useless anywhere else even if it leaks.
 | `kokli-deploy-key` | SSH Username with private key | Username `ubuntu`; the private key from step 1 |
 | `github-read` | Username with password | Username: your GitHub user name. Password: a **fine-grained personal access token** (GitHub → Settings → Developer settings → Fine-grained tokens) with *Public repositories* read-only access and no other permission, expiring in a year — with a calendar reminder |
 
-`github-read` is how Jenkins asks GitHub for the Full suite's verdict, and how the
-job scans the repository. Without a token both share GitHub's 60 anonymous calls an
+`github-read` is how Jenkins asks GitHub for the verdict of its CI run (lint, build
+and the full suite) on the commit about to ship, and how the job scans the repository. Without a token both share GitHub's 60 anonymous calls an
 hour with everything else on this server, and a busy hour turns into a red build.
 The image never leaves this server, so no registry token is needed
 (`ghcr-credentials` is only for a registry — see the Jenkinsfile's header).
@@ -582,26 +601,34 @@ and one clinic subdomain on an uptime monitor with certificate-expiry alerts.
 
 ### 7e. What a push does
 
-| Pushed to | Jenkins: image built (lint included), booted, backup tested | GitHub: full suite | Deployed |
+| Pushed to | Jenkins: image built (lint included), booted, backup tested | GitHub: CI (lint, build, full suite) | Deployed |
 |---|:-:|:-:|:-:|
 | `main`, `KOKLI_DEPLOY_HOST` set | ✓ | ✓ (Jenkins waits for it) | ✓ |
 | `main`, `KOKLI_DEPLOY_HOST` unset | ✓ | ✓ | — |
 | a branch | ✓ | — | — |
 | a pull request | ✓ | ✓ | — |
 
-The deploy, step by step, and what each failure does:
+The image gets the commit's tag (`kokli:<commit>`) only after it has booted and passed
+its backup round trip in Jenkins; until then it has a name of that build's own.
+
+**The deploy runs on the server, not in Jenkins.** Jenkins sends
+[deploy/server/deploy.sh](deploy/server/deploy.sh), starts it detached, and follows
+its log, `~/kokli/deploy-<run>.log`. So stopping the build — Abort, a timeout,
+Jenkins restarting, a dropped connection — never stops a deploy half-way through the
+swap: it carries on to its end, live or rolled back, and the log says which. Step by
+step, and what each failure does:
 
 | Step | If it fails |
 |---|---|
-| checks the server: Docker, Compose, `.env.local`, `backups/`, the two networks, `kokli-mysql` healthy — and puts the proxy back on `kokli-network` if it has dropped off | stops, printing the command that fixes it |
-| waits for `~/kokli/.kokli.lock` — a running nightly backup or restore test finishes first | after 30 minutes, stops; nothing changed |
+| checks the server ([preflight.sh](deploy/server/preflight.sh)): Docker, Compose, `.env.local`, `backups/`, 2 GB free, the two networks, `kokli-mysql` healthy — and puts the proxy back on `kokli-network` if it has dropped off | stops, printing the command that fixes it |
+| waits for `~/kokli/.kokli.lock` — a running nightly backup or restore test finishes first | after 25 minutes, stops; nothing changed |
 | finds the image (already on this Docker — Jenkins built it here) | stops; nothing changed |
 | checks this commit's compose files against this server's settings | stops; nothing changed |
 | backs up the database **with the new image**, into `backups/predeploy` | stops; nothing changed — and it proves the new image reaches MySQL first |
 | applies the new image's migrations, while the old version keeps serving | stops before the swap; the old version stays live. Statements that did apply stay applied |
-| swaps the compose files and the container; waits up to 90 s for `/api/health` to report the new commit from the new image | **puts the previous image and compose files back**, checks that they are healthy, and fails the build with the new one's log |
-| keeps the five images deployed last, plus `kokli:rollback` (the one just replaced) and `kokli:latest`; removes other `kokli` tags | — |
-| `https://kokli.in/api/health` from outside | the build turns **yellow**: the server is fine; DNS, TLS or the proxy is not |
+| swaps the compose files and the container; waits up to 90 s for `/api/health` to report the new commit from the new image | **puts the previous image and compose files back**, checks that they are healthy, and fails the build. The new version's own log goes to `~/kokli/deploy-<run>-app.log` (mode 600), not into Jenkins: it can hold patients' details |
+| keeps the three images deployed last, plus `kokli:rollback` (the one just replaced) and `kokli:latest`; removes other `kokli` tags | — |
+| `https://kokli.in/api/health`, asked from the server through DNS, TLS and the proxy | the build turns **yellow**: the app is fine; DNS, TLS or the proxy is not |
 
 **The swap is not invisible:** for about five seconds the proxy answers 502, and a video
 call in progress drops. Merge to `main` outside clinic hours.
@@ -621,8 +648,9 @@ code before it:
 
 ```bash
 curl https://kokli.in/api/health                 # which commit is live
-cd ~/kokli && docker compose logs -f app         # the app's log
+cd ~/kokli && docker compose logs -f kokli       # the app's log
 tail ~/kokli/backup.log ~/kokli/cron.log         # the scheduled jobs
+ls -t ~/kokli/deploy-*.log | head -3             # the latest deploys' logs
 
 # Change a setting: edit, check, then RECREATE (restart does not re-read env files)
 nano ~/kokli/.env.local
@@ -630,17 +658,17 @@ docker run --rm -v ~/kokli/.env.local:/env:ro -v ~/kokli-src/deploy/server/check
   node:24-bookworm-slim node /c.js /env
 cd ~/kokli && docker compose up -d --no-build
 
-# Go back to an earlier version: one of the five deployed last (newest last), or
+# Go back to an earlier version: one of the three deployed last (newest last), or
 # kokli:rollback — the one the last deploy replaced. Migrations are additive, so
 # an older version runs on today's schema.
 cat ~/kokli/.deployed; docker image ls kokli
 cd ~/kokli && echo "KOKLI_IMAGE=kokli:<commit>" > .env && docker compose up -d --no-build
 
 # Which migrations has this database not had yet? (Deploys apply them; this only looks.)
-cd ~/kokli && docker compose run --rm --no-deps -T app node scripts/migrate.js --pending </dev/null
+cd ~/kokli && docker compose run --rm --no-deps -T kokli node scripts/migrate.js --pending </dev/null
 
 # A backup now, under the same lock as everything else
-cd ~/kokli && flock .kokli.lock docker compose run --rm --no-deps -T app node scripts/backup.js </dev/null
+cd ~/kokli && flock .kokli.lock docker compose run --rm --no-deps -T kokli node scripts/backup.js </dev/null
 ```
 
 **Disaster recovery** — putting a dump back into the live database. The app is
@@ -649,11 +677,11 @@ replaced is dumped first, in case the wrong file was picked:
 
 ```bash
 cd ~/kokli && exec 9>>.kokli.lock && flock 9          # no deploy or backup meanwhile
-docker compose stop app
-docker compose run --rm --no-deps -T -e BACKUP_DIR=/app/backups/before-restore app node scripts/backup.js </dev/null
+docker compose stop kokli
+docker compose run --rm --no-deps -T -e BACKUP_DIR=/app/backups/before-restore kokli node scripts/backup.js </dev/null
 gunzip -c ~/kokli/backups/<file>.sql.gz \
   | docker exec -i kokli-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot physio_clinic'
-docker compose start app
+docker compose start kokli
 exec 9>&-                                             # the lock, released
 ```
 
@@ -685,7 +713,7 @@ DB_PASSWORD=devpassword    # the profile's default root password
 
 ```bash
 docker compose --profile local-db up -d --build
-docker compose run --rm app node scripts/setup-db.js     # schema and demo data, once
+docker compose run --rm kokli node scripts/setup-db.js     # schema and demo data, once
 ```
 
 The `local-db` profile runs the same MySQL as production (9.7, `+05:30`,

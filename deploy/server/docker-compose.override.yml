@@ -22,7 +22,7 @@
 # =============================================================================
 
 services:
-  app:
+  kokli:
     ports: !reset []
     networks:
       - kokli-network

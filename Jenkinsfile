@@ -4,17 +4,17 @@
 //  A push to GitHub ends one of two ways: that commit running on kokli.in, or a
 //  red build that says why it is not.
 //
-//    1. IMAGE            builds the Dockerfile — lint included — tagged with
-//                        the commit, boots it, and proves it can migrate, back
-//                        up and restore the real schema. With a registry
-//                        configured, main pushes it.
+//    1. IMAGE            builds the Dockerfile — lint included — boots it, and
+//                        proves it can migrate, back up and restore the real
+//                        schema. Only then does main tag it with the commit
+//                        (and, with a registry configured, push it).
 //    2. FULL SUITE       a real MySQL and a real server: it signs in as four
 //                        roles over HTTP and asserts that one clinic cannot
 //                        reach another's data. Mocking that would prove nothing.
 //                        It runs on GitHub's machines (see THE FULL SUITE below)
 //                        — or here, with KOKLI_FULL_SUITE_HERE=yes.
-//    3. GITHUB'S VERDICT on main: waits until GitHub's run of the full suite on
-//                        this exact commit has passed
+//    3. GITHUB'S VERDICT on main: waits until GitHub's CI run on this exact
+//                        commit — lint, build and the full suite — has passed
 //    4. DEPLOY           on main: the server runs that exact image — it backs
 //                        up the database, applies migrations, swaps the
 //                        container, checks it is healthy, and puts the previous
@@ -47,15 +47,19 @@
 //  And builds go through a builder of Kokli's own (`docker buildx`, named
 //  kokli): a build is capped at 3 GB and two cores, so it cannot push
 //  production out of memory, and its cache is Kokli's alone, kept under 5 GB,
-//  so it cannot fill the shared disk. Nobody else's build cache is ever pruned.
-//  Every clean-up here is limited to what Kokli made — by label, by name.
+//  so it cannot fill the shared disk. If that builder cannot be made, the build
+//  stops — it never falls back to Docker's shared one. Nobody else's build
+//  cache is ever pruned; every clean-up here is limited to what Kokli made, by
+//  label and by name. And a build that finds the disk nearly full stops before
+//  it adds to it.
 //
 //  WHAT IS DEPLOYED IS WHAT WAS TESTED
 //  -----------------------------------
 //  The server never builds anything. It runs the image this pipeline built from
 //  the commit the suite passed on, identified by that commit's id — so "which
 //  version is live?" has a one-word answer (`curl https://kokli.in/api/health`),
-//  and a rollback is choosing an older id.
+//  and a rollback is choosing an older id. The commit's tag is given to an
+//  image only after it has booted and passed its backup round trip here.
 //
 //  WHERE THE IMAGE GOES
 //  --------------------
@@ -208,6 +212,8 @@ def ensureImageEnv() {
   env.PUSH           = (env.SHIP == 'yes' && env.REGISTRY) ? 'yes' : 'no'
   // 12 characters: short enough to read, long enough never to clash.
   env.IMAGE_TAG      = env.TESTED_COMMIT.substring(0, 12)
+  // The tag the server runs. Only a build that ships owns it.
+  env.IMAGE_REF      = (env.SHIP == 'yes') ? "${env.IMAGE_NAME}:${env.IMAGE_TAG}" : ''
   env.BUILD_SITE_URL = env.KOKLI_SITE_URL?.trim() ?: 'http://localhost:3000'
   // The SERVER's processor, not this machine's. A Jenkins on an Apple-silicon
   // Mac builds arm64 images by default, and an arm64 image on an ordinary x86
@@ -223,9 +229,10 @@ pipeline {
   agent none
 
   options {
-    // A pipeline that hangs forever holds an agent and tells you nothing. Long
-    // enough for a cold Docker build plus GitHub's suite, the slowest things here.
-    timeout(time: 60, unit: 'MINUTES')
+    // Each stage has a limit of its own (a deploy, above all, must not be cut
+    // short by time spent waiting earlier); this one only catches what slips
+    // through all of them.
+    timeout(time: 150, unit: 'MINUTES')
     buildDiscarder(logRotator(numToKeepStr: '30'))
     // Two deploys at once would race each other on the server.
     disableConcurrentBuilds()
@@ -251,6 +258,7 @@ pipeline {
     // that same machine — never a stale one on a different agent.
     stage('Image') {
       agent any
+      options { timeout(time: 45, unit: 'MINUTES') }
       stages {
         stage('Build and boot') {
           steps {
@@ -271,13 +279,13 @@ pipeline {
                       'System → Global properties (e.g. https://kokli.in), then build again.')
               }
 
-              // What THIS build tags its image as. Only a build that ships may
-              // own `kokli:<commit>` — that is the tag the server runs. A branch
-              // or pull request at the same commit would otherwise tag over the
-              // live image, and its clean-up would then delete it. So
-              // everything else gets a name of its own, unique to this build.
-              env.IMAGE_REF = (env.SHIP == 'yes') ? "${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                                                  : "kokli-ci:${env.IMAGE_TAG}-b${env.BUILD_NUMBER}-e${env.EXECUTOR_NUMBER}"
+              // What this build calls its image while testing it — a name unique
+              // to this build, on every branch. Main gives the image the
+              // commit's tag only once every check below has passed (the last
+              // step of this stage): on a rebuild of the live commit, that tag
+              // is the live one, and it must never point at an image that has
+              // not yet been tested.
+              env.BUILD_REF = "kokli-ci:${env.IMAGE_TAG}-b${env.BUILD_NUMBER}-e${env.EXECUTOR_NUMBER}"
             }
 
             // Lint runs inside this build: the Dockerfile's `build` stage waits
@@ -286,19 +294,26 @@ pipeline {
             // --pull fetches the newest base images, so security fixes in Debian
             // reach production without anybody remembering to ask.
             sh '''
-# Kokli's own builder — see ON A JENKINS SHARED WITH OTHER PEOPLE at the top.
-# Made the first time it is needed; buildx starts its container when it is not
-# running. memory-swap = memory: the host has no swap to give it anyway.
-BUILDER=""
-if docker buildx inspect kokli >/dev/null 2>&1 || docker buildx create --name kokli --driver docker-container --driver-opt memory=3g --driver-opt memory-swap=3g --driver-opt cpu-period=100000 --driver-opt cpu-quota=200000 >/dev/null; then
-  BUILDER="--builder kokli"
-else
-  echo "WARNING: could not make Kokli's own buildx builder, so this builds with Docker's default one."
-  echo "         That works, but the build has no memory cap, and its cache is shared with"
-  echo "         everyone else's on this Docker, so nothing here prunes it."
+# The disk is shared with other people's databases. A build and its image take
+# a few GB for a while; below this, stopping is better than filling the disk.
+free_gb=$(( $(df -Pk . | awk 'NR==2 {print $4}') / 1024 / 1024 ))
+if [ "$free_gb" -lt 4 ]; then
+  echo "ERROR: only $free_gb GB free on this disk, so nothing is built. See what holds it: docker system df"
+  exit 1
 fi
 
-docker buildx build $BUILDER --load --pull --progress plain --platform "$BUILD_PLATFORM" --build-arg NEXT_PUBLIC_SITE_URL="$BUILD_SITE_URL" --build-arg KOKLI_VERSION="$IMAGE_TAG" -t "$IMAGE_REF" .
+# Kokli's own builder — see ON A JENKINS SHARED WITH OTHER PEOPLE at the top.
+# Made the first time it is needed; buildx starts its container when it is not
+# running. memory-swap = memory: the host has no swap to give it anyway. Asked
+# for twice: two first builds at once may both try to make it, and one loses.
+if ! { docker buildx inspect kokli >/dev/null 2>&1 || docker buildx create --name kokli --driver docker-container --driver-opt memory=3g --driver-opt memory-swap=3g --driver-opt cpu-period=100000 --driver-opt cpu-quota=200000 >/dev/null || docker buildx inspect kokli >/dev/null 2>&1; }; then
+  echo "ERROR: could not make Kokli's own buildx builder (Docker's reason is above)."
+  echo "       Docker's default builder is not used instead: it has no memory cap, and"
+  echo "       its cache is shared with everyone else's on this server."
+  exit 1
+fi
+
+docker buildx build --builder kokli --load --pull --progress plain --platform "$BUILD_PLATFORM" --build-arg NEXT_PUBLIC_SITE_URL="$BUILD_SITE_URL" --build-arg KOKLI_VERSION="$IMAGE_TAG" -t "$BUILD_REF" .
 '''
 
             // ---------------------------------------------------------------
@@ -318,7 +333,7 @@ docker buildx build $BUILDER --load --pull --progress plain --platform "$BUILD_P
             sh '''
 # No --name: Docker picks one and we keep the id. A fixed name collides when two
 # branch jobs (each with its own build numbers) run at once.
-SMOKE="$(docker run -d --label "kokli-ci=$BUILD_TAG" --memory=1g --platform "$BUILD_PLATFORM" -e AUTH_SECRET=smoke-test-only-not-a-real-secret -e PLATFORM_ENCRYPTION_KEY=smoke-test-only-not-a-real-key -e DB_HOST=127.0.0.1 "$IMAGE_REF")"
+SMOKE="$(docker run -d --label "kokli-ci=$BUILD_TAG" --memory=1g --platform "$BUILD_PLATFORM" -e AUTH_SECRET=smoke-test-only-not-a-real-secret -e PLATFORM_ENCRYPTION_KEY=smoke-test-only-not-a-real-key -e DB_HOST=127.0.0.1 "$BUILD_REF")"
 trap 'docker rm -fv "$SMOKE" >/dev/null 2>&1 || true' EXIT
 
 body=""
@@ -366,7 +381,7 @@ for i in $(seq 1 90); do
 done
 docker exec -i "$DB" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' < deploy/kokli-db/init/01-grants.sql
 
-docker run --rm --label "kokli-ci=$BUILD_TAG" --memory=1g --network "$NET" -e DB_HOST=db -e DB_USER=kokli -e DB_PASSWORD=ci-kokli-password -e DB_NAME=physio_clinic -e BACKUP_DIR=/tmp/backups "$IMAGE_REF" sh -c '
+docker run --rm --label "kokli-ci=$BUILD_TAG" --memory=1g --network "$NET" -e DB_HOST=db -e DB_USER=kokli -e DB_PASSWORD=ci-kokli-password -e DB_NAME=physio_clinic -e BACKUP_DIR=/tmp/backups "$BUILD_REF" sh -c '
 set -e
 echo "-- the image keeps India time: offset $(node -p "new Date().getTimezoneOffset() * -1") minutes"
 [ "$(node -p "new Date().getTimezoneOffset() * -1")" = 330 ]
@@ -395,6 +410,17 @@ else
   echo "No Docker Compose plugin on this agent; docker-compose.yml not checked here."
 fi
 '''
+
+            // Every check above passed: only now does main's image get the
+            // commit's tag — the one the deploy, the server's .env and its
+            // nightly backup refer to.
+            sh '''
+if [ "$SHIP" = yes ]; then
+  docker tag "$BUILD_REF" "$IMAGE_REF"
+  docker image rm "$BUILD_REF" >/dev/null
+  echo "tested, and tagged $IMAGE_REF"
+fi
+'''
           }
         }
 
@@ -416,8 +442,8 @@ fi
 export DOCKER_CONFIG="$(mktemp -d)"
 trap 'rm -rf "$DOCKER_CONFIG"' EXIT
 printf '%s' "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
-docker push "$IMAGE_NAME:$IMAGE_TAG"
-echo "pushed $IMAGE_NAME:$IMAGE_TAG"
+docker push "$IMAGE_REF"
+echo "pushed $IMAGE_REF"
 '''
             }
           }
@@ -432,10 +458,9 @@ echo "pushed $IMAGE_NAME:$IMAGE_TAG"
         //  * This build's containers and network, if an abort or a timeout
         //    killed the shell before its trap ran (dash runs no EXIT trap when
         //    it is killed) — and any a build two hours ago left the same way.
-        //  * This build's image — UNLESS it is about to be deployed from this
-        //    machine's own Docker, in which case removing it here would delete
-        //    the very image the deploy needs. The deploy keeps the last few
-        //    shipped images itself.
+        //  * This build's test name for its image. Main's image keeps the
+        //    commit's tag for the deploy — unless it went through a registry,
+        //    in which case the server pulls it and this copy goes too.
         //  * Kokli images no tag points to any more.
         //  * Kokli's own build cache, down to 5 GB. The builder's base images
         //    stay warm within that; older commits' layers go first.
@@ -450,9 +475,8 @@ done
 docker network ls -q --filter "label=kokli-ci=$BUILD_TAG" | xargs -r docker network rm >/dev/null 2>&1 || true
 docker network prune -f --filter label=kokli-ci --filter until=2h >/dev/null 2>&1 || true
 
-if [ -n "${IMAGE_REF:-}" ] && ! { [ "${SHIP:-}" = yes ] && [ "${PUSH:-}" = no ]; }; then
-  docker image rm "$IMAGE_REF" >/dev/null 2>&1 || true
-fi
+if [ -n "${BUILD_REF:-}" ]; then docker image rm "$BUILD_REF" >/dev/null 2>&1 || true; fi
+if [ -n "${IMAGE_REF:-}" ] && [ "${PUSH:-}" = yes ]; then docker image rm "$IMAGE_REF" >/dev/null 2>&1 || true; fi
 docker image prune -f --filter label=org.opencontainers.image.title=kokli >/dev/null 2>&1 || true
 if docker buildx inspect kokli >/dev/null 2>&1; then
   docker buildx prune --builder kokli -f --max-used-space 5gb >/dev/null 2>&1 || true
@@ -472,6 +496,7 @@ fi
     // machine of its own, not a shared one.
     stage('Full suite') {
       agent any
+      options { timeout(time: 60, unit: 'MINUTES') }
       when {
         beforeAgent true
         expression { return fullSuiteHere() }
@@ -593,25 +618,31 @@ done
       }
     }
 
+
     /* ===================================================================== */
     /*  3. GITHUB'S VERDICT                                                  */
     /* ===================================================================== */
     // Only a build that is about to ship waits, and only when the suite ran on
-    // GitHub rather than here. No agent: a node — an executor — is taken only
-    // for the second each question to GitHub takes, never for the minutes in
-    // between. Other jobs on this Jenkins are not kept waiting by this one.
+    // GitHub rather than here. What it waits for is GitHub's run of
+    // .github/workflows/ci.yml for the PUSH of this exact commit to main — not
+    // a pull request's run of the same commit, which tested a different merge.
+    //
+    // No agent: a node — an executor — is taken only for the second each
+    // question to GitHub takes, never for the minutes in between. Other jobs on
+    // this Jenkins are not kept waiting by this one.
     stage("GitHub's verdict") {
       agent none
+      options { timeout(time: 40, unit: 'MINUTES') }
       when { expression { return shouldShip() && !fullSuiteHere() } }
       steps {
         script {
           if (!env.TESTED_COMMIT) { node { checkout scm; recordCommit() } }
-          echo "Waiting for GitHub Actions' Full suite on ${env.GITHUB_REPO} at ${env.TESTED_COMMIT}"
+          echo "Waiting for GitHub Actions' CI run on ${env.GITHUB_REPO} at ${env.TESTED_COMMIT}"
 
           // One question per call. Exit codes: 0 passed, 1 failed, 2 still
           // running, 3 not started yet, 4 no answer, 5 the token was refused.
           def ask = '''
-API="https://api.github.com/repos/$GITHUB_REPO/commits/$TESTED_COMMIT/check-runs?check_name=Full%20suite&filter=latest"
+API="https://api.github.com/repos/$GITHUB_REPO/actions/workflows/ci.yml/runs?head_sha=$TESTED_COMMIT&event=push&branch=main&per_page=5"
 hdr="$(mktemp)"
 out="$(mktemp)"
 trap 'rm -f "$hdr" "$out"' EXIT
@@ -629,6 +660,8 @@ if [ "$code" != 200 ]; then
   echo
   exit 4
 fi
+# Newest run first. Within a run, its own status, conclusion and address come
+# before anything nested in it.
 body="$(cat "$out")"
 total="$(printf '%s' "$body" | grep -o '"total_count": *[0-9]*' | head -1 | grep -o '[0-9]*$' || true)"
 status="$(printf '%s' "$body" | grep -o '"status": *"[a-z_]*"' | head -1 | cut -d'"' -f4)"
@@ -640,10 +673,10 @@ if [ "${total:-0}" = 0 ]; then
 fi
 if [ "$status" = completed ]; then
   if [ "$conclusion" = success ]; then
-    echo "GitHub's Full suite passed on this commit: $url"
+    echo "GitHub's CI run passed on this commit: $url"
     exit 0
   fi
-  echo "GitHub's Full suite did not pass on this commit (${conclusion:-unknown}). The failing assertions are on the run: $url"
+  echo "GitHub's CI run did not pass on this commit (${conclusion:-unknown}). The failing assertions are on the run: $url"
   exit 1
 fi
 echo "  $(date +%H:%M:%S)  ${status:-in progress}"
@@ -675,13 +708,13 @@ exit 2
             }
           }
           if (verdict == 'failed') {
-            error("GitHub's Full suite did not pass on this commit, so nothing is deployed.")
+            error("GitHub's CI run did not pass on this commit, so nothing is deployed.")
           }
           if (verdict == 'refused') {
             error('Fix the github-read credential (DEPLOYMENT.md §7c), then build this commit again.')
           }
           if (verdict == 'never started') {
-            error('After 10 minutes GitHub has not started a Full suite for this commit. ' +
+            error('After 10 minutes GitHub has not started a CI run for this push. ' +
                   'Check that .github/workflows/ci.yml still runs on pushes to main.')
           }
           if (verdict != 'passed') {
@@ -694,14 +727,20 @@ exit 2
     /* ===================================================================== */
     /*  4. DEPLOY                                                            */
     /* ===================================================================== */
+    // The deploy itself is deploy/server/deploy.sh, run ON the server and
+    // detached from this build: Jenkins starts it, follows its log, and reads
+    // its result. Aborting this build, or this build timing out, never stops a
+    // deploy half-way through a swap; it carries on to its end — live, or
+    // rolled back — and its log stays on the server.
     stage('Deploy') {
       agent any
+      options { timeout(time: 45, unit: 'MINUTES') }
       when {
         beforeAgent true
         expression { return shouldShip() }
       }
       steps {
-        // For docker-compose.yml: the version of it that belongs to this commit.
+        // The scripts and compose files that belong to this commit.
         pinToTestedCommit()
 
         // withCredentials, not sshagent: it needs no extra plugin, and it hands
@@ -718,18 +757,10 @@ exit 2
             creds.add(usernamePassword(credentialsId: 'ghcr-credentials', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN'))
           }
           withCredentials(creds) {
-            // Every remote script body starts at column zero for the same reason
-            // as the heredocs in stage 2. `remote` is a function rather than a
-            // variable holding the ssh flags, so a key file in a path with a
-            // space in it — a job named "Kokli CI" — still works.
-            //
-            // Each script sent to the server is ONE function, called on the
-            // last line with its input taken from /dev/null. `bash -s` reads
-            // its script from the same stdin its commands inherit, a byte at a
-            // time; any command that reads stdin — `docker compose run` does,
-            // by default — would swallow the rest of the script, and the deploy
-            // would end half-way and "succeed". Defined first and called last,
-            // the whole script is read before any of it runs.
+            // `remote` is a function rather than a variable holding the ssh
+            // flags, so a key file in a path with a space in it — a job named
+            // "Kokli CI" — still works. Every `remote` that is not fed a script
+            // gets /dev/null as its input: ssh would otherwise read this step's.
             sh '''
 remote() {
   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=30 "$SSH_USER@$DEPLOY_TO" "$@"
@@ -738,276 +769,84 @@ send() {
   scp -q -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o BatchMode=yes "$1" "$SSH_USER@$DEPLOY_TO:$2"
 }
 
-# ---------------------------------------------------------------------------
-#  1. Is the server ready? Every check names its own fix, because the first
-#     deploy to a new server is exactly when these are missing.
-# ---------------------------------------------------------------------------
-remote bash -s <<'PREFLIGHT'
-main() {
-set -eu
-cd ~
-mkdir -p kokli/backups
-command -v docker >/dev/null 2>&1 || { echo "ERROR: Docker is not installed on this server. See DEPLOYMENT.md 7a."; exit 1; }
-docker info >/dev/null 2>&1 || { echo "ERROR: $(whoami) cannot use Docker. Run: sudo usermod -aG docker $(whoami) - then log out and in again."; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "ERROR: the Docker Compose plugin is missing. Run: sudo apt install docker-compose-plugin"; exit 1; }
-command -v flock >/dev/null 2>&1 || { echo "ERROR: flock is missing. Run: sudo apt install util-linux"; exit 1; }
-[ -f kokli/.env.local ] || { echo "ERROR: ~/kokli/.env.local does not exist. DEPLOYMENT.md 7a says what goes in it."; exit 1; }
-[ "$(stat -c %u kokli/backups)" = 1000 ] || { echo "ERROR: ~/kokli/backups must belong to uid 1000, the user inside the container. Run: sudo chown 1000:1000 ~/kokli/backups"; exit 1; }
-if [ -f kokli/docker-compose.override.yml ]; then
-  for n in kokli-network kokli-internal; do
-    docker network inspect "$n" >/dev/null 2>&1 || { echo "ERROR: Docker network $n is missing. Run deploy/server/bootstrap.sh - DEPLOYMENT.md 7a."; exit 1; }
-  done
-  if docker container inspect kokli-mysql >/dev/null 2>&1; then
-    [ "$(docker container inspect -f '{{.State.Health.Status}}' kokli-mysql)" = healthy ] || { echo "ERROR: kokli-mysql is not healthy. On the server: docker logs kokli-mysql"; exit 1; }
-  fi
-  # The proxy reaches Kokli over kokli-network. That link lives in the proxy's
-  # container, not in any file, so re-creating the proxy — an upgrade — drops
-  # it, and every Kokli address answers 502. Put it back.
-  if [ -f kokli/.proxy-container ]; then
-    proxy="$(cat kokli/.proxy-container)"
-    if ! docker container inspect "$proxy" >/dev/null 2>&1; then
-      echo "WARNING: the proxy container $proxy, named in ~/kokli/.proxy-container, does not exist here."
-    elif ! docker container inspect -f '{{range $k, $v := .NetworkSettings.Networks}} {{$k}} {{end}}' "$proxy" | grep -q ' kokli-network '; then
-      docker network connect kokli-network "$proxy"
-      echo "reconnected $proxy to kokli-network"
-    fi
-  fi
-fi
-echo "server is ready for a deploy"
-}
-main "$@" </dev/null
-PREFLIGHT
+# 1. Is the server ready? (And put the proxy back on kokli-network if an
+#    upgrade of the proxy dropped it.)
+remote bash -s < deploy/server/preflight.sh
 
-# ---------------------------------------------------------------------------
-#  2. This commit's compose files, beside the live ones as *.new. The deploy
-#     checks them on the server and swaps them in with the image — and puts
-#     the old ones back if it rolls back. The server has no git checkout: it
-#     needs these and .env.local, the one file Jenkins never touches.
-# ---------------------------------------------------------------------------
+# 2. This commit's compose files, beside the live ones as *.new. The deploy
+#    checks them on the server and swaps them in with the image — and puts the
+#    old ones back if it rolls back. The server has no git checkout: it needs
+#    these and .env.local, the one file Jenkins never touches.
 send docker-compose.yml kokli/docker-compose.yml.new
 if remote test -f kokli/docker-compose.override.yml </dev/null; then
   send deploy/server/docker-compose.override.yml kokli/docker-compose.override.yml.new
 fi
 
-# ---------------------------------------------------------------------------
-#  3. With a registry: let the server pull from it. Through stdin, so the token
-#     is in no command line and no log; the deploy logs out again when done.
-#     Without one there is nothing to do — the image is already there.
-# ---------------------------------------------------------------------------
+# 3. With a registry: let the server pull from it. Through stdin, so the token
+#    is in no command line and no log, and into a Docker config of Kokli's own
+#    (~/kokli/.docker) — never the server account's, which other people's tools
+#    use. The deploy logs out again when done. Without a registry there is
+#    nothing to do: the image is already there.
 if [ "$PUSH" = yes ]; then
-  printf '%s' "$GHCR_TOKEN" | remote "docker login $REGISTRY -u $GHCR_USER --password-stdin" >/dev/null
+  printf '%s' "$GHCR_TOKEN" | remote "DOCKER_CONFIG=~/kokli/.docker docker login $REGISTRY -u $GHCR_USER --password-stdin" >/dev/null
   echo "server logged in to $REGISTRY"
 fi
 
-# ---------------------------------------------------------------------------
-#  4. The deploy itself. Its last line, KOKLI-DEPLOYED, is checked for below:
-#     the only proof the script ran to its end. (Through tee, ssh's own exit
-#     status is lost — the line is what counts.)
-# ---------------------------------------------------------------------------
-remote bash -s -- "$IMAGE_NAME:$IMAGE_TAG" "$IMAGE_TAG" "$REGISTRY" <<'REMOTE' | tee deploy-remote.log
-main() {
-set -euo pipefail
-NEW="$1"
-TAG="$2"
-# Empty without a registry — and ssh drops an empty argument altogether, hence
-# the default rather than a plain $3, which `set -u` would reject.
-REGISTRY="${3:-}"
-REPO="${NEW%:*}"
-ROLLBACK="$REPO:rollback"
-cd ~/kokli
-
-# Any registry login above was only for the pull. Forget it on the way out,
-# success or failure, so no registry token lives on this server.
-trap 'if [ -n "$REGISTRY" ]; then docker logout "$REGISTRY" >/dev/null 2>&1 || true; fi' EXIT
-
-# One at a time. The nightly backup and the weekly restore check take this
-# same lock (the cron block bootstrap.sh installs): a deploy that stopped the
-# container under a running backup would leave half a dump behind.
-exec 9>>.kokli.lock
-if ! flock -w 1800 9; then
-  echo "ERROR: a backup, a restore check or another deploy has held ~/kokli/.kokli.lock for 30 minutes."
-  echo "       Nothing was changed."
+# 4. The deploy: started detached on the server, then followed. A file of its
+#    own per deploy, so a deploy still running from an aborted build is never
+#    rewritten under it.
+RUN="$(date -u +%Y%m%d-%H%M%S)-b$BUILD_NUMBER"
+send deploy/server/deploy.sh "kokli/deploy-$RUN.sh"
+PID="$(remote bash "kokli/deploy-$RUN.sh" --start "$IMAGE_REF" "$IMAGE_TAG" "$RUN" "$REGISTRY" </dev/null || true)"
+if [ -z "$PID" ]; then
+  echo "ERROR: the deploy did not start on the server. What it wrote:"
+  remote "cat kokli/deploy-$RUN.log" </dev/null || true
   exit 1
 fi
+echo "deploying on the server: process $PID, log ~/kokli/deploy-$RUN.log"
+remote "tail -n +1 -f --pid=$PID kokli/deploy-$RUN.log" </dev/null || true
+lost=no
+while remote "grep -q deploy-$RUN /proc/$PID/cmdline 2>/dev/null" </dev/null; do
+  lost=yes
+  echo "(the log stream broke off; the deploy is still running on the server - waiting for it)"
+  sleep 15
+done
+remote "cat kokli/deploy-$RUN.log" </dev/null > deploy-remote.log || true
+if [ "$lost" = yes ]; then cat deploy-remote.log; fi
 
-# Healthy: answering, able to reach MySQL, and reporting the version asked for
-# (none asked for: any version).
-healthy() {
-  local want="$1" body i
-  for i in $(seq 1 45); do
-    body="$(docker exec kokli node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>r.text()).then(t=>console.log(t)).catch(()=>process.exit(1))" 2>/dev/null || true)"
-    if printf '%s' "$body" | grep -q '"ok":true' && { [ -z "$want" ] || printf '%s' "$body" | grep -q "$want"; }; then
-      return 0
-    fi
-    sleep 2
-  done
-  return 1
-}
-
-PREV="$(sed -n 's/^KOKLI_IMAGE=//p' .env 2>/dev/null || true)"
-echo "live now:  ${PREV:-nothing yet - this is the first deploy}"
-echo "deploying: $NEW"
-
-# Built by this pipeline on this very Docker? Then it is already here.
-if docker image inspect "$NEW" >/dev/null 2>&1; then
-  echo "image is already on this server"
-elif [ -n "$REGISTRY" ]; then
-  docker pull --quiet "$NEW"
+# Done means both: exit code 0, and the last line the deploy prints only once
+# the new version is live and healthy.
+rc="$(remote "cat kokli/deploy-$RUN.result 2>/dev/null" </dev/null || true)"
+if [ "$rc" = 0 ] && grep -qxF "KOKLI-DEPLOYED $IMAGE_REF" deploy-remote.log; then
+  echo "the server reports $IMAGE_REF live and healthy"
+elif [ -z "$rc" ]; then
+  echo "ERROR: the deploy on the server stopped without finishing (killed, or the machine restarted)."
+  echo "       See what is running: on the server, cd ~/kokli && docker compose ps"
+  exit 1
 else
-  echo "ERROR: $NEW is not on this server, and there is no registry to fetch it from."
-  echo "       Without a registry, Jenkins and the app must share a machine. Otherwise set"
-  echo "       KOKLI_IMAGE_REPO to a registry path - see WHERE THE IMAGE GOES in the Jenkinsfile."
-  exit 1
-fi
-NEW_ID="$(docker image inspect -f '{{.Id}}' "$NEW")"
-
-# A first deploy has no live compose file to back up with: this commit's
-# becomes the live one at once — there is nothing running that it could break.
-rm -f docker-compose.yml.prev docker-compose.override.yml.prev
-for f in docker-compose.yml docker-compose.override.yml; do
-  if [ ! -f "$f" ] && [ -f "$f.new" ]; then mv "$f.new" "$f"; fi
-done
-
-# This commit's compose files, checked against this server's own settings
-# before anything depends on them.
-files=(-f docker-compose.yml)
-if [ -f docker-compose.yml.new ]; then files=(-f docker-compose.yml.new); fi
-if [ -f docker-compose.override.yml.new ]; then files+=(-f docker-compose.override.yml.new)
-elif [ -f docker-compose.override.yml ]; then files+=(-f docker-compose.override.yml); fi
-if ! KOKLI_IMAGE="$NEW" docker compose "${files[@]}" config -q; then
-  echo "ERROR: this commit's docker-compose.yml does not work with this server's settings (see above)."
-  echo "       Nothing was changed."
-  exit 1
-fi
-
-# A backup BEFORE anything changes. It costs seconds, and it is the difference
-# between a bad deploy and a bad day. Taken with the NEW image, which also
-# proves that image can reach MySQL before the old one is stopped: if this
-# fails, the site is still up and nothing has been touched. Into a pool of its
-# own (backups/predeploy, the newest ten), so a busy day of deploys never pushes
-# the nightly dumps out of their thirty slots. Its own container name, so it
-# can never collide with the `kokli` container serving patients right now.
-echo "== backing up the database"
-if ! KOKLI_IMAGE="$NEW" docker compose run --rm --no-deps -T --name "kokli-backup-$TAG-$$" -e BACKUP_DIR=/app/backups/predeploy -e BACKUP_KEEP=10 app node scripts/backup.js </dev/null; then
-  echo "ERROR: the backup failed, so nothing was changed - ${PREV:-the current version} is still live."
-  echo "       Most often the new container cannot reach MySQL: DB_HOST in ~/kokli/.env.local,"
-  echo "       and DEPLOYMENT.md 7a for letting containers in."
-  exit 1
-fi
-
-# The schema, brought up to what the new code expects — by the new image's own
-# migrations, while the old version keeps serving. Migrations are additive by
-# rule (scripts/migrate.js), so the old code works on the new schema too: now,
-# and after a rollback.
-echo "== applying database migrations"
-if ! KOKLI_IMAGE="$NEW" docker compose run --rm --no-deps -T --name "kokli-migrate-$TAG-$$" app node scripts/migrate.js </dev/null; then
-  echo "ERROR: a migration failed, so the new version was NOT started - ${PREV:-the current version} is still live."
-  echo "       Statements that did apply stay applied and recorded: fix the migration and push again."
-  echo "       The backup taken just before is the newest file in ~/kokli/backups/predeploy."
-  exit 1
-fi
-
-# The image serving right now, pinned by its id under a tag of its own. A
-# rebuild of the same commit takes over its old tag, so a name read from .env
-# could point at the new image; this cannot.
-RUNNING_ID="$(docker container inspect -f '{{.Image}}' kokli 2>/dev/null || true)"
-if [ -n "$RUNNING_ID" ]; then docker tag "$RUNNING_ID" "$ROLLBACK"; fi
-
-# The switch. .env is the file Compose reads by itself, so it now also tells
-# anyone typing `docker compose ...` on this server which version is live.
-for f in docker-compose.yml docker-compose.override.yml; do
-  if [ -f "$f.new" ]; then
-    cp -p "$f" "$f.prev"
-    mv "$f.new" "$f"
-  fi
-done
-echo "KOKLI_IMAGE=$NEW" > .env
-
-# `up` is inside the `if` on purpose. By the time it fails — port 3000 still
-# held by something else, say — it has already removed the old container.
-# Left to `set -e`, the script would stop right there, with the site down and
-# the rollback below never reached.
-state=down
-if docker compose up -d --no-build; then
-  state=unhealthy
-  if healthy "$TAG" && [ "$(docker container inspect -f '{{.Image}}' kokli 2>/dev/null || true)" = "$NEW_ID" ]; then
-    state=healthy
-  fi
-fi
-
-if [ "$state" != healthy ]; then
-  if [ "$state" = unhealthy ]; then
-    echo "ERROR: $NEW started but did not become healthy within 90 seconds. Its last lines:"
-    docker compose logs --no-color --tail 80 app || true
-  else
-    echo "ERROR: $NEW could not be started at all - Docker's reason is just above."
-  fi
-  for f in docker-compose.yml docker-compose.override.yml; do
-    if [ -f "$f.prev" ]; then mv "$f.prev" "$f"; fi
-  done
-  if [ -z "$RUNNING_ID" ]; then
-    echo "Nothing to roll back to: no version was running before this one."
-    exit 1
-  fi
-  echo "Rolling back to the image that was serving before ($ROLLBACK)"
-  echo "KOKLI_IMAGE=$ROLLBACK" > .env
-  if docker compose up -d --no-build --force-recreate && healthy ""; then
-    echo "rolled back - the previous version is serving again"
-  else
-    echo "ERROR: the previous version did not come back healthy either. THE SITE IS DOWN."
-    echo "       On the server: cd ~/kokli && docker compose logs app"
-  fi
-  exit 1
-fi
-
-echo "live: $NEW"
-docker tag "$NEW" "$REPO:latest"
-
-# Old Kokli images. The five most recently deployed stay, and so do :rollback
-# (the one just replaced) and :latest — going back never needs a rebuild or a
-# registry. Everything else under this repository name goes: builds that never
-# went live, and versions more than five deploys old. Only this repository's
-# images are listed, so nothing else on the server is touched, and `image rm`
-# refuses any image a container is still using.
-echo "$NEW" >> .deployed
-tail -n 20 .deployed > .deployed.tmp && mv .deployed.tmp .deployed
-keep="$(tail -n 5 .deployed)"
-docker image ls "$REPO" --format '{{.Repository}}:{{.Tag}}' | while read -r img; do
-  case "$img" in
-    "$REPO:latest"|"$ROLLBACK"|*':<none>') continue ;;
-  esac
-  if echo "$keep" | grep -qxF -- "$img"; then continue; fi
-  docker image rm "$img" >/dev/null 2>&1 || true
-done
-docker image prune -f --filter label=org.opencontainers.image.title=kokli >/dev/null 2>&1 || true
-docker compose ps
-echo "KOKLI-DEPLOYED $NEW"
-}
-main "$@" </dev/null
-REMOTE
-
-if ! grep -qxF "KOKLI-DEPLOYED $IMAGE_NAME:$IMAGE_TAG" deploy-remote.log; then
-  echo "ERROR: the deploy on the server did not finish - its last lines are just above."
+  echo "ERROR: the deploy on the server did not go live (exit $rc) - its log is above, and in ~/kokli/deploy-$RUN.log."
   exit 1
 fi
 '''
 
             // From the outside, the way a patient arrives: DNS, TLS, the proxy.
-            // The server has just said it is healthy, so a failure here is in
-            // front of the app, not in this deploy — the build turns yellow
-            // (unstable) rather than red.
+            // Asked from the server itself — a container here, Jenkins', is not
+            // a reliable vantage point for the host's own public address. The
+            // server has just said it is healthy, so a failure here is in front
+            // of the app, not in this deploy: the build turns yellow (unstable)
+            // rather than red.
             def outside = sh(returnStatus: true, script: '''
-if curl -sf --max-time 15 "$BUILD_SITE_URL/api/health" | grep -q "$IMAGE_TAG"; then
+if ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o BatchMode=yes "$SSH_USER@$DEPLOY_TO" "curl -sf --max-time 15 $BUILD_SITE_URL/api/health" </dev/null | grep -q "$IMAGE_TAG"; then
   echo "$BUILD_SITE_URL is serving $IMAGE_TAG"
 else
   echo "The server itself reports $IMAGE_TAG live and healthy, but $BUILD_SITE_URL/api/health"
-  echo "did not say so from here. What is wrong is in front of the app: DNS, the TLS"
-  echo "certificate or the Nginx Proxy Manager host (DEPLOYMENT.md 7d)."
+  echo "did not say so. What is wrong is in front of the app: DNS, the TLS certificate"
+  echo "or the Nginx Proxy Manager host (DEPLOYMENT.md 7d)."
   exit 1
 fi
 ''')
             if (outside != 0) {
-              unstable("${env.IMAGE_TAG} is live on the server, but ${env.BUILD_SITE_URL} did not answer with it from outside.")
+              unstable("${env.IMAGE_TAG} is live on the server, but ${env.BUILD_SITE_URL} did not answer with it.")
             }
           }
         }
@@ -1017,7 +856,8 @@ fi
 
   post {
     success  { echo "Build ${env.BUILD_NUMBER} passed${shouldShip() ? ' and is live' : ''}." }
-    unstable { echo "Build ${env.BUILD_NUMBER}: live on the server, but not reachable from outside — see the Deploy stage." }
+    unstable { echo "Build ${env.BUILD_NUMBER}: live on the server, but not reachable through kokli.in — see the Deploy stage." }
     failure  { echo "Build ${env.BUILD_NUMBER} failed — the stage above has the reason." }
+    aborted  { echo "Build ${env.BUILD_NUMBER} was stopped. A deploy already started on the server carries on to its end; its log is ~/kokli/deploy-*.log there." }
   }
 }

@@ -40,7 +40,11 @@
 name: kokli
 
 services:
-  app:
+  # The service is called kokli, not the usual `app`: on Kokli's server it joins
+  # a network the shared reverse proxy is on, and Compose gives every service
+  # its name as a DNS name there. A generic name could answer for somebody
+  # else's `app` on that proxy.
+  kokli:
     build:
       context: .
       args:

@@ -6,9 +6,10 @@
 #  signs in as four different roles over HTTP and asserts that one clinic cannot
 #  reach another's data. A mocked version of that would prove nothing.
 #
-#  `test` is the "Full suite" check Jenkins waits for before it deploys a
-#  commit to main (the Jenkinsfile, stage 3). Renaming the job renames the
-#  check, and Jenkins would then wait for one that never comes.
+#  Jenkins waits for this workflow's run on a push to main — both jobs — before
+#  it deploys that commit (the Jenkinsfile, stage 3). It asks for it by this
+#  file's name, ci.yml: renaming or moving the file, or no longer running it on
+#  pushes to main, would leave Jenkins waiting for a run that never comes.
 #
 #  WHY THE DEV SERVER AND NOT THE PRODUCTION BUILD
 #  -----------------------------------------------
