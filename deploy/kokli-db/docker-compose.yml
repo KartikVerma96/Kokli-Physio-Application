@@ -1,0 +1,124 @@
+# =============================================================================
+#  Kokli — the production database, as its own Compose project
+# =============================================================================
+#  Lives on the server in ~/kokli-db, beside (not inside) the app's ~/kokli.
+#
+#    cd ~/kokli-db && docker compose up -d
+#
+#  WHY A SEPARATE PROJECT
+#  ----------------------
+#  It holds every clinic's medical records. Kept apart from the app, nothing a
+#  deploy does — and nothing anybody types in ~/kokli — can reach it. And the
+#  data volume is EXTERNAL: Compose never deletes an external volume, so even
+#  `docker compose down -v` typed here, by mistake, removes the container and
+#  leaves the data exactly where it was.
+#
+#  WHY NO PORT
+#  -----------
+#  It publishes nothing. The only way in is the `kokli-internal` network, which
+#  is internal (no route to the internet in either direction) and is shared with
+#  exactly one other container: the app. This server's firewall is off, so a
+#  published 3306 would be a published database.
+#
+#  ONE-TIME SETUP
+#  --------------
+#  deploy/server/bootstrap.sh creates the network, the volume and the passwords
+#  in .env, then starts this. DEPLOYMENT.md §7 walks through it.
+# =============================================================================
+
+name: kokli-db
+
+services:
+  mysql:
+    # MySQL's long-term-support line, and the version the code is developed and
+    # tested against. Patch releases arrive with `docker compose pull`.
+    image: mysql:9.7
+    container_name: kokli-mysql
+    restart: unless-stopped
+
+    # The two passwords, generated on the server — never committed. The format
+    # is in env.example beside this file.
+    env_file:
+      - .env
+    environment:
+      # The image creates this database and this user, with ALL on it, the
+      # first time the volume is empty. Nothing happens on later starts.
+      MYSQL_DATABASE: physio_clinic
+      MYSQL_USER: kokli
+      # root may log in only from inside this container (`docker exec`), which
+      # is the only way anything here uses it. The image's default is any host
+      # — and the app's container shares a network with this one.
+      MYSQL_ROOT_HOST: localhost
+
+    command:
+      # ---------------------------------------------------------------------
+      #  The collation the schema expects — and why it must be set HERE
+      # ---------------------------------------------------------------------
+      #  database/schema.sql says `CREATE DATABASE IF NOT EXISTS physio_clinic
+      #  ... COLLATE utf8mb4_unicode_ci`. But this image creates the database
+      #  FIRST (MYSQL_DATABASE above), so that line does nothing, and the 18
+      #  tables that do not name a collation would inherit MySQL 9's default
+      #  (utf8mb4_0900_ai_ci) while the other 3 say unicode_ci. A join between
+      #  the two kinds then fails with "Illegal mix of collations". Making
+      #  unicode_ci the server default gives every table the same one.
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # ---------------------------------------------------------------------
+      #  India time for NOW(), CURDATE() and every DEFAULT CURRENT_TIMESTAMP
+      # ---------------------------------------------------------------------
+      #  Appointment times are stored as the clinic's wall clock, and the SQL
+      #  compares them with NOW(). On the server's UTC clock, reminders would go
+      #  out 5.5 hours late and "today" would change at 05:30. This must match
+      #  TZ=Asia/Kolkata in the app's image (Dockerfile) — one without the other
+      #  is worse than neither. An offset, not a zone name, because it needs no
+      #  time-zone tables; India has no daylight saving.
+      #
+      #  It has to be here BEFORE the first real row is written: DATETIME keeps
+      #  whatever wall-clock time it was written in, and never converts later.
+      - --default-time-zone=+05:30
+      # ---------------------------------------------------------------------
+      #  Binary logs: one week, and never the weekly restore check
+      # ---------------------------------------------------------------------
+      #  MySQL keeps a binary log by default, for 30 days, on the disk the data
+      #  is on. Nothing replicates from it; its one use here is replaying the
+      #  hours between the last nightly dump and a disaster, and a week covers
+      #  that. And every Sunday `backup.js --verify` restores a full copy of
+      #  every clinic into physio_clinic_verify — logged, that would be one more
+      #  full copy of all the data on disk each week, for nothing.
+      - --binlog-expire-logs-seconds=604800
+      - --binlog-ignore-db=physio_clinic_verify
+
+    volumes:
+      - kokli-db-data:/var/lib/mysql
+      # Run once, on the first start with an empty volume. See init/.
+      - ./init:/docker-entrypoint-initdb.d:ro
+
+    networks:
+      - kokli-internal
+
+    # `mysqladmin ping` succeeds as soon as the server answers, even without a
+    # password — which is exactly the question. During first-time setup the
+    # image runs a temporary server with networking off, so this stays
+    # "starting" until the real one is up.
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '--silent']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  # Created once by bootstrap.sh (`docker volume create kokli-db-data`). External
+  # is the safety catch described at the top: Compose will not delete it.
+  kokli-db-data:
+    external: true
+
+networks:
+  kokli-internal:
+    external: true

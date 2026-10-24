@@ -36,6 +36,7 @@ INSERT INTO plans
   (code, name, tagline, price_paise, billing_period, trial_days,
    max_physios, max_locations, max_appointments_per_month,
    video_enabled, soap_notes_enabled, whatsapp_enabled, analytics_enabled,
+   whatsapp_monthly_quota, whatsapp_own_number,
    highlights, sort_order)
 VALUES
 
@@ -45,6 +46,7 @@ VALUES
  49900, 'monthly', 30,
  1, 1, 0,
  0, 1, 0, 0,
+ 0, 0,
  JSON_ARRAY(
    'Your own booking website',
    '1 physiotherapist',
@@ -61,6 +63,7 @@ VALUES
  129900, 'monthly', 30,
  3, 1, 0,
  1, 1, 1, 0,
+ 500, 0,
  JSON_ARRAY(
    'Everything in Starter',
    'One-to-one video consultations',
@@ -77,6 +80,7 @@ VALUES
  299900, 'monthly', 30,
  10, 5, 0,
  1, 1, 1, 1,
+ 2000, 1,
  JSON_ARRAY(
    'Everything in Professional',
    'Up to 10 physiotherapists',

@@ -1,11 +1,23 @@
 # =============================================================================
 #  Kokli — one app container, and a database only when you ask for one
 # =============================================================================
-#  PRODUCTION
+#  PRODUCTION, DEPLOYED BY JENKINS  (the normal way — see DEPLOYMENT.md §7)
+#    Jenkins copies this file to ~/kokli on the server, beside the server's own
+#    docker-compose.override.yml (networks, no published port), writes the image
+#    it just built into ~/kokli/.env as KOKLI_IMAGE=kokli:<commit>, and runs
+#
+#      docker compose up -d --no-build
+#
+#    Nothing is built on the server. It runs the exact image the tests passed.
+#    MySQL is kokli-mysql, its own Compose project (deploy/kokli-db), reached
+#    over the kokli-internal network: DB_HOST=kokli-mysql in .env.local. Nginx
+#    Proxy Manager reaches the app over kokli-network, by its name, `kokli`.
+#
+#  PRODUCTION, BY HAND  (no Jenkins, no override — DEPLOYMENT.md §3)
 #    docker compose up -d --build
 #
-#  That starts the application and nothing else. MySQL is expected to be running
-#  on the host, with DB_HOST in .env.local pointing at it:
+#  That starts the application and nothing else, published on 127.0.0.1:3000
+#  for a reverse proxy on the same machine, with MySQL running on the host:
 #
 #    DB_HOST=host.docker.internal
 #
@@ -13,9 +25,10 @@
 #  -------------------------------------------------
 #  It holds medical records. `docker compose down -v` deletes volumes, and it is
 #  one word away from `docker compose down` — a command people type when they
-#  mean "restart". A database on the host cannot be erased by a typo in the
-#  wrong directory, and it is restored from a backup by somebody who knows they
-#  are restoring. See DEPLOYMENT.md.
+#  mean "restart". A database kept apart — on the host, or in a project of its
+#  own with an external volume — cannot be erased by a typo in this directory,
+#  and it is restored from a backup by somebody who knows they are restoring.
+#  See DEPLOYMENT.md.
 #
 #  LOCAL DEVELOPMENT
 #    docker compose --profile local-db up -d --build
@@ -35,7 +48,11 @@ services:
         # known at build time — unlike everything in .env.local, which is read
         # when the container starts.
         NEXT_PUBLIC_SITE_URL: ${SITE_URL:-http://localhost:3000}
-    image: kokli:latest
+    # Which image to run. On the server, ~/kokli/.env holds the one Jenkins
+    # deployed — Compose reads that file by itself — so a hand-typed
+    # `docker compose restart` there keeps running the same version rather than
+    # trying to build one. Unset (a laptop), it is the image `--build` makes.
+    image: ${KOKLI_IMAGE:-kokli:latest}
     container_name: kokli
 
     # Every secret comes from the host at run time. Nothing is baked into the
@@ -43,9 +60,11 @@ services:
     env_file:
       - .env.local
 
-    # Bound to loopback, not 0.0.0.0. Caddy (or nginx) terminates TLS and
-    # forwards to this port; nothing outside the machine should reach the Node
-    # process directly, and on a server with no firewall that is the difference.
+    # Bound to loopback, not 0.0.0.0: a reverse proxy on the same machine
+    # terminates TLS and forwards to this port; nothing outside the machine
+    # should reach the Node process directly, and on a server with no firewall
+    # that is the difference. (Kokli's server publishes no port at all — its
+    # override resets this list.)
     ports:
       - '127.0.0.1:3000:3000'
 
@@ -55,10 +74,10 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
 
-    # The backups directory is the host's, not the container's. `docker compose
-    # exec app npm run backup` writes a dump of every clinic's records; written
-    # inside the container it would vanish with the next `up --build`, and the
-    # first time anyone noticed would be the day they needed it.
+    # The backups directory is the host's, not the container's. scripts/backup.js
+    # writes a dump of every clinic's records; written inside the container it
+    # would vanish with the next re-create, and the first time anyone noticed
+    # would be the day they needed it.
     #
     # Create it before the first `up`, owned by uid 1000 — the `node` user the
     # container runs as. Docker creates a missing bind-mount path as root, and
@@ -88,8 +107,14 @@ services:
   # ---------------------------------------------------------------------------
   db:
     profiles: ['local-db']
-    image: mysql:9
+    # The same version and settings as production (deploy/kokli-db), so a laptop
+    # behaves like the server: same collation, same India-time clock.
+    image: mysql:9.7
     container_name: kokli-db
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+05:30
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-devpassword}
       MYSQL_DATABASE: ${DB_NAME:-physio_clinic}

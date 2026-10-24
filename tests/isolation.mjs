@@ -309,7 +309,7 @@ console.log('\nTHE PLATFORM')
     `got ${asClinic.status}`)
 
   const s3 = makeSession()
-  const owner = await signIn(s3, PLATFORM, 'owner@physioflow.in', 'owner123')
+  const owner = await signIn(s3, PLATFORM, 'owner@kokli.in', 'owner123')
   check(owner?.role === 'platform', 'the platform owner can sign in', `role=${owner?.role}`)
   const console_ = await s3.req(PLATFORM, '/platform')
   check(console_.status === 200, 'and reaches the console', `got ${console_.status}`)

@@ -3,6 +3,8 @@
 import { headers } from 'next/headers'
 import { requireCurrentClinic } from '@/lib/tenant'
 import { requestOtp, verifyOtp, issueLoginTicket } from '@/lib/otp'
+import { clientIp } from '@/lib/clientIp'
+import { canSendAuthCodes } from '@/lib/whatsapp'
 
 /**
  * ============================================================================
@@ -30,6 +32,20 @@ import { requestOtp, verifyOtp, issueLoginTicket } from '@/lib/otp'
 /** Step 1 — send a code to this number, if anybody is on it. */
 export async function requestLoginCode({ phone }) {
   const clinic = await requireCurrentClinic()
+
+  /**
+   * The same question the login page asks before it shows the phone option.
+   *
+   * The page hides phone sign-in when no code could reach the patient — no
+   * WhatsApp configured in production, or a plan without it. But a server action
+   * can be called directly, without the page. Unchecked here, such a request
+   * would still mint a real, working login code and hand it to printToTerminal():
+   * into the server log, which is exactly where a login code must never be.
+   */
+  if (!(await canSendAuthCodes(clinic))) {
+    return { ok: false, message: 'Sign-in by phone is not available here. Use your email and password.' }
+  }
+
   return requestOtp({ clinic, phone, ip: await clientAddress() })
 }
 
@@ -67,16 +83,11 @@ export async function confirmLoginCode({ phone, code }) {
 }
 
 /**
- * The client's address, for rate limiting.
- *
- * Behind a proxy the socket address is the proxy's, so `x-forwarded-for` is the
- * real one — but only when a proxy you control sets it. Locally there is none and
- * the header is absent, which is why null is an accepted answer: the per-number
- * limits still apply, and those are the ones that matter.
+ * The client's address, for rate limiting. Locally there is no proxy and this
+ * is null, which is an accepted answer: the per-number limits still apply, and
+ * those are the ones that matter. Which header is trusted — and why the first
+ * X-Forwarded-For entry never is — is explained in lib/clientIp.js.
  */
 async function clientAddress() {
-  const store = await headers()
-  const forwarded = store.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0].trim().slice(0, 45)
-  return store.get('x-real-ip')?.slice(0, 45) || null
+  return clientIp(await headers())
 }

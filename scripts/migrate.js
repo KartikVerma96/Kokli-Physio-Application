@@ -4,9 +4,27 @@
  * ============================================================================
  *
  *      npm run db:migrate
+ *      npm run db:migrate -- --pending    only list what has not been applied;
+ *                                         exits 3 if anything is pending
  *
  *  Applies every file in database/migrations/ that has not been applied yet, in
  *  filename order, and records what it did.
+ *
+ *  ON THE SERVER, EVERY DEPLOY RUNS THIS — before the new code goes live
+ *  ---------------------------------------------------------------------
+ *  The Jenkins deploy takes a backup, then runs this script from the NEW image
+ *  while the OLD container is still serving, and only then swaps (DEPLOYMENT.md
+ *  §7e). So for a while the old code runs against the new schema, and the rule
+ *  for every migration follows from that:
+ *
+ *    * Additive only: a new table, a new column WITH a default, a new index.
+ *      Code that does not know about them keeps working.
+ *    * Dropping or renaming something comes in a LATER release, after the code
+ *      that used it is gone from production — a rollback puts the old code back
+ *      on the new schema too.
+ *
+ *  A migration that fails stops the deploy before the swap; the old container
+ *  keeps serving, and the backup taken a moment earlier is the way back.
  *
  *  WHY THIS EXISTS
  *  ---------------
@@ -32,7 +50,16 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const mysql = require('mysql2/promise')
 
-process.loadEnvFile(path.join(__dirname, '..', '.env.local'))
+// .env.local on a laptop. Inside the Docker image there is no such file: the
+// same variables arrive as the container's environment (compose's env_file),
+// and a bare call here would crash the script before it did anything. Only a
+// MISSING file is expected — one that exists but cannot be read is a real
+// problem, and still stops the script.
+try {
+  process.loadEnvFile(path.join(__dirname, '..', '.env.local'))
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error
+}
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'database', 'migrations')
 
@@ -82,6 +109,34 @@ const ALREADY_DONE = new Set([
   'ER_DUP_CHECK_CONSTRAINT_NAME',
 ])
 
+/**
+ * --pending: what would run, without running it and without writing anything —
+ * not even the bookkeeping table. Exit 3 means "something is pending", so a
+ * script can tell that apart from a failure (exit 1).
+ */
+async function listPending(connection, files) {
+  let done = new Set()
+  try {
+    const [applied] = await connection.query('SELECT fingerprint FROM schema_migrations')
+    done = new Set(applied.map((r) => r.fingerprint))
+  } catch (error) {
+    if (error.code !== 'ER_NO_SUCH_TABLE') throw error
+  }
+
+  let pending = 0
+  for (const file of files) {
+    const statements = statementsIn(fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8'))
+    statements.forEach((statement, i) => {
+      if (done.has(fingerprint(file, statement))) return
+      pending++
+      console.log(`  · ${file}, statement ${i + 1}: ${statement.replace(/\s+/g, ' ').slice(0, 100)}`)
+    })
+  }
+
+  console.log(pending ? `\n${pending} statement(s) pending.\n` : '✓ Nothing pending.')
+  return pending
+}
+
 async function main() {
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST,
@@ -91,6 +146,16 @@ async function main() {
     database: process.env.DB_NAME,
     multipleStatements: false,
   })
+
+  if (process.argv.includes('--pending')) {
+    const files = fs.existsSync(MIGRATIONS_DIR)
+      ? fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort()
+      : []
+    const pending = await listPending(connection, files)
+    await connection.end()
+    process.exitCode = pending ? 3 : 0
+    return
+  }
 
   await connection.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -118,6 +183,7 @@ async function main() {
 
   let ran = 0
   let skipped = 0
+  let inPlace = 0
 
   for (const file of files) {
     const statements = statementsIn(fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8'))
@@ -147,6 +213,7 @@ async function main() {
           // Recorded anyway: the database is in the state this statement wanted,
           // which is the only thing that matters.
           console.log(`      (already done: ${error.code})`)
+          inPlace++
         } else {
           console.error(`\n✗ ${file}, statement ${i + 1}:`)
           console.error(`  ${error.code} — ${error.sqlMessage}`)
@@ -163,7 +230,12 @@ async function main() {
     }
   }
 
-  console.log(`\n✓ ${ran} statement(s) applied, ${skipped} already there.\n`)
+  // Three different things, counted apart: a fresh database built from
+  // schema.sql already has most of what the migrations add.
+  console.log(
+    `\n✓ ${ran} statement(s) applied, ${inPlace} found already in place (recorded now), ` +
+      `${skipped} recorded before.\n`
+  )
   await connection.end()
 }
 

@@ -5,6 +5,7 @@ import { getCurrentClinic } from '@/lib/tenant'
 import { createResetToken, resetUrl } from '@/lib/passwordReset'
 import { sendEmail } from '@/lib/email'
 import { passwordReset } from '@/lib/emailTemplates'
+import { clientIp } from '@/lib/clientIp'
 
 /**
  * ============================================================================
@@ -63,9 +64,7 @@ export async function requestPasswordReset({ email }) {
   }
 }
 
+// Which header is trusted for this, and why, is explained in lib/clientIp.js.
 async function clientAddress() {
-  const store = await headers()
-  const forwarded = store.get('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0].trim().slice(0, 45)
-  return store.get('x-real-ip')?.slice(0, 45) || null
+  return clientIp(await headers())
 }

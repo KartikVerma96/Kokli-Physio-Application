@@ -1,0 +1,35 @@
+# =============================================================================
+#  ~/kokli/docker-compose.override.yml — this server's half of the app's setup
+# =============================================================================
+#  Compose merges a file with exactly this name, in the same folder, into
+#  docker-compose.yml by itself — for `up`, `run`, `exec` and the rest. So the
+#  repository's compose file stays the same everywhere, and what is particular
+#  to this server lives here.
+#
+#  bootstrap.sh puts it in place once; after that every deploy brings this
+#  commit's version along with docker-compose.yml, and puts the old one back if
+#  it rolls back.
+#
+#  The two networks:
+#    kokli-network    shared with Nginx Proxy Manager, which forwards kokli.in
+#                     and *.kokli.in to this container by its name, `kokli`
+#    kokli-internal   shared with kokli-mysql and nothing else
+#
+#  And no published port. The proxy reaches the app over kokli-network, and the
+#  deploy's health checks run inside the container, so nothing needs the host's
+#  port 3000 — on a server other people also use, a port Kokli holds is a port
+#  that can collide with theirs.
+# =============================================================================
+
+services:
+  app:
+    ports: !reset []
+    networks:
+      - kokli-network
+      - kokli-internal
+
+networks:
+  kokli-network:
+    external: true
+  kokli-internal:
+    external: true

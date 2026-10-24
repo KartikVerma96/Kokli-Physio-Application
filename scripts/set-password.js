@@ -4,6 +4,7 @@
  * ============================================================================
  *      npm run set-password -- owner@kokli.in
  *      npm run set-password -- owner@kokli.in --generate
+ *      printf '%s\n' "$PASSWORD" | npm run set-password -- owner@kokli.in --stdin
  *
  *  WHY A DOCUMENTED RECOVERY PROCEDURE IS NOT A HACK
  *  -------------------------------------------------
@@ -40,7 +41,16 @@ const readline = require('node:readline')
 const bcrypt = require('bcryptjs')
 const mysql = require('mysql2/promise')
 
-process.loadEnvFile(path.join(__dirname, '..', '.env.local'))
+// .env.local on a laptop. Inside the Docker image there is no such file: the
+// same variables arrive as the container's environment (compose's env_file),
+// and a bare call here would crash the script before it did anything. Only a
+// MISSING file is expected — one that exists but cannot be read is a real
+// problem, and still stops the script.
+try {
+  process.loadEnvFile(path.join(__dirname, '..', '.env.local'))
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error
+}
 
 const c = {
   bold: (s) => `\x1b[1m${s}\x1b[0m`,
@@ -80,6 +90,27 @@ function askHidden(question) {
 }
 
 /**
+ * Read the password from standard input instead — for provisioning a server,
+ * where there is no terminal to type into (`docker compose run -T`):
+ *
+ *     printf '%s\n' "$PASSWORD" | node scripts/set-password.js owner@kokli.in --stdin
+ *
+ * The same idea as `docker login --password-stdin`: the password is in no
+ * command line, where `ps` would show it, and in no shell history. Only the
+ * first line counts. askHidden() cannot do this job — each call opens its own
+ * reader, and with piped input the first one swallows both lines.
+ */
+function readStdinLine() {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', (chunk) => { data += chunk })
+    process.stdin.on('end', () => resolve(data.split(/\r?\n/)[0]))
+    process.stdin.on('error', reject)
+  })
+}
+
+/**
  * Four random words beats a random string of symbols.
  *
  * It is longer, therefore stronger, and it can be read aloud down a phone line —
@@ -101,11 +132,13 @@ async function main() {
   const args = process.argv.slice(2)
   const email = args.find((a) => !a.startsWith('--'))
   const generate = args.includes('--generate')
+  const fromStdin = args.includes('--stdin')
 
   if (!email) {
     console.error(c.red('\n  ✗ Which account?\n'))
     console.error('      npm run set-password -- owner@kokli.in')
-    console.error('      npm run set-password -- owner@kokli.in --generate\n')
+    console.error('      npm run set-password -- owner@kokli.in --generate')
+    console.error("      printf '%s\\n' \"$PASSWORD\" | npm run set-password -- owner@kokli.in --stdin\n")
     process.exit(1)
   }
 
@@ -151,6 +184,8 @@ async function main() {
     let password
     if (generate) {
       password = generatePassword()
+    } else if (fromStdin) {
+      password = await readStdinLine()
     } else {
       password = await askHidden('  New password (not shown): ')
       const again = await askHidden('  Again: ')

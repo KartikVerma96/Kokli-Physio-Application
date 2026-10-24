@@ -25,6 +25,8 @@ out
 tests
 *.md
 Jenkinsfile
+# Server set-up files (bootstrap, the database stack): used on the server, never in the image.
+deploy/
 Dockerfile
 docker-compose.yml
 .dockerignore
@@ -32,3 +34,4 @@ docker-compose.yml
 .idea
 .DS_Store
 npm-debug.log*
+*.log

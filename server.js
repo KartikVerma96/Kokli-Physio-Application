@@ -69,6 +69,18 @@ const handle = app.getRequestHandler()
 
 app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
+    // Two headers only the app itself may set. A client can send either, and the
+    // proxy in front (nginx) passes request headers through untouched:
+    //   x-forwarded-host  Next fills it in from Host when it is absent, and the
+    //                     auth route believes it — so a client-sent one would be
+    //                     believed instead of the real hostname
+    //   x-clinic-slug     which clinic this request is for. proxy.js sets it from
+    //                     the hostname, but proxy.js does not run on every path
+    //                     (robots.txt, sitemap.xml and /api/auth skip it)
+    // Dropped here, the real Host header becomes the only source of both.
+    delete req.headers['x-forwarded-host']
+    delete req.headers['x-clinic-slug']
+
     handle(req, res).catch((error) => {
       console.error('[server] request failed:', error)
       res.statusCode = 500

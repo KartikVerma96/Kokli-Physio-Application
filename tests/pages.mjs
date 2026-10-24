@@ -350,7 +350,7 @@ check(Boolean(appointment), 'a test appointment was booked, so the detail pages 
 /* ------------------------------------------------------ the platform owner */
 {
   const boss = makeSession()
-  const user = await signIn(boss, PLATFORM, 'owner@physioflow.in', 'owner123')
+  const user = await signIn(boss, PLATFORM, 'owner@kokli.in', 'owner123')
   check(user?.role === 'platform', 'the platform owner signs in', `role=${user?.role}`)
 
   await crawl('SIGNED IN AS THE PLATFORM OWNER', boss, PLATFORM, [

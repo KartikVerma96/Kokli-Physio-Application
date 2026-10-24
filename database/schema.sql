@@ -834,6 +834,10 @@ CREATE TABLE patient_packages (
   updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                              ON UPDATE CURRENT_TIMESTAMP,
 
+  -- When the "your package is running out" WhatsApp went, so it goes once.
+  -- (Added by migration 005 on older databases; lib/whatsappJobs.js reads it.)
+  wa_expiry_nudge_sent_at DATETIME NULL,
+
   KEY idx_pp_clinic_patient (clinic_id, patient_id, status),
   KEY idx_pp_expiry (clinic_id, status, expires_at),
 
@@ -928,6 +932,12 @@ CREATE TABLE appointments (
   -- raises prices next month, this appointment must still show what the patient
   -- actually paid.
   amount_paise      INT UNSIGNED NOT NULL,
+
+  -- Set when staff mark a no-show, from the clinic's policy at that moment. A
+  -- fee changed next year must not retrospectively alter what somebody owed.
+  -- (Added by migration 003 on older databases; written by every status change
+  -- in app/admin/appointments/[id]/actions.js, so it has to exist from day one.)
+  no_show_fee_paise INT UNSIGNED NOT NULL DEFAULT 0,
 
   patient_notes     TEXT NULL,
   pain_level        TINYINT UNSIGNED NULL,
@@ -1088,6 +1098,10 @@ CREATE TABLE consultation_notes (
   created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                                 ON UPDATE CURRENT_TIMESTAMP,
+
+  -- When the home-exercise plan went out by WhatsApp, so it goes once.
+  -- (Added by migration 005 on older databases.)
+  wa_exercises_sent_at DATETIME NULL,
 
   -- One note per appointment.
   UNIQUE KEY uq_note_appointment (appointment_id),

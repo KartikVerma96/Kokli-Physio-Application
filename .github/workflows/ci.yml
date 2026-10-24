@@ -1,10 +1,14 @@
 # =============================================================================
-#  CI — every push and every pull request
+#  CI — every push to main, and every pull request
 # =============================================================================
 #  Two jobs. `check` is fast and always runs. `test` stands up a real MySQL and
 #  a real server, because that is the only way this suite means anything: it
 #  signs in as four different roles over HTTP and asserts that one clinic cannot
 #  reach another's data. A mocked version of that would prove nothing.
+#
+#  `test` is the "Full suite" check Jenkins waits for before it deploys a
+#  commit to main (the Jenkinsfile, stage 3). Renaming the job renames the
+#  check, and Jenkins would then wait for one that never comes.
 #
 #  WHY THE DEV SERVER AND NOT THE PRODUCTION BUILD
 #  -----------------------------------------------
@@ -41,10 +45,16 @@ jobs:
   test:
     name: Full suite
     runs-on: ubuntu-latest
+    # India time, as in production (TZ in the Dockerfile, +05:30 on MySQL). A
+    # suite running UTC against UTC agrees with itself, and so can never notice
+    # a time-zone bug.
+    env:
+      TZ: Asia/Kolkata
 
     services:
       mysql:
-        image: mysql:9
+        # The production series (deploy/kokli-db).
+        image: mysql:9.7
         env:
           MYSQL_ROOT_PASSWORD: ci
           MYSQL_DATABASE: physio_clinic
@@ -67,6 +77,17 @@ jobs:
       #  does not, so every clinic subdomain the suites use has to be spelled out
       #  or the tests fail with ENOTFOUND — which reads like a broken app rather
       #  than a missing hosts entry.
+      # A service container cannot be given server flags, so the two production
+      # settings are applied through its own client: India time (as
+      # --default-time-zone=+05:30 does on the server) and the schema's
+      # collation (the image created this database before schema.sql ran).
+      - name: Configure MySQL the way production runs it
+        run: |
+          docker exec ${{ job.services.mysql.id }} mysql -uroot -pci -e "
+            SET GLOBAL time_zone = '+05:30';
+            ALTER DATABASE physio_clinic CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            SELECT @@global.time_zone, @@character_set_server;"
+
       - name: Point every test subdomain at localhost
         run: |
           sudo tee -a /etc/hosts >/dev/null <<'HOSTS'
@@ -120,7 +141,17 @@ jobs:
             curl -s -o /dev/null -H 'Host: aarogya.localhost' "http://localhost:3000$p" || true
           done
 
-      - run: npm test
+      - name: npm test
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/test.log
+
+      # Failing assertions as annotations, so they show on the commit and the run
+      # page for anyone — the raw logs need admin rights to read — and Jenkins's
+      # "GitHub's verdict" stage links straight to them.
+      - name: Failing assertions
+        if: failure()
+        run: grep -E '✗' /tmp/test.log | head -30 | sed 's/^ *//; s/^/::error::/' || true
 
       # The log is the only way to see WHY a suite failed once the job has ended.
       - name: Server log

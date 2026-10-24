@@ -383,19 +383,22 @@ export default function LoginForm({ googleEnabled, phoneEnabled, next, oauthErro
       </p>
 
       {/* The demo credentials, so anyone learning from this project can get in
-          immediately. Delete this block before the site goes anywhere near a
-          real patient. */}
-      <div className="mt-8 rounded-2xl border border-dashed border-ink-300 p-4 text-xs dark:border-ink-700">
-        <p className="font-bold text-ink-600 dark:text-ink-300">Demo accounts</p>
-        <ul className="mt-2 space-y-1 text-ink-500 dark:text-ink-400">
-          <li>Patient — patient@example.com / patient123</li>
-          <li>Physio — doctor@aarogyaphysio.in / doctor123</li>
-          <li>Admin — admin@aarogyaphysio.in / admin123</li>
-        </ul>
-        <p className="mt-2 text-ink-400">
-          Remove this block in app/(auth)/login/LoginForm.js before going live.
-        </p>
-      </div>
+          immediately — in development only. NODE_ENV is fixed when Next builds,
+          so a production build does not contain this block at all: patients on
+          a real clinic's sign-in page never see logins that do not exist there. */}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="mt-8 rounded-2xl border border-dashed border-ink-300 p-4 text-xs dark:border-ink-700">
+          <p className="font-bold text-ink-600 dark:text-ink-300">Demo accounts</p>
+          <ul className="mt-2 space-y-1 text-ink-500 dark:text-ink-400">
+            <li>Patient — patient@example.com / patient123</li>
+            <li>Physio — doctor@aarogyaphysio.in / doctor123</li>
+            <li>Admin — admin@aarogyaphysio.in / admin123</li>
+          </ul>
+          <p className="mt-2 text-ink-400">
+            Shown in development only — a production build leaves it out.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
