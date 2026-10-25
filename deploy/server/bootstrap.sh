@@ -55,8 +55,11 @@ docker compose version >/dev/null 2>&1 || die "The Docker Compose plugin is miss
 command -v openssl >/dev/null || die "openssl is missing: sudo apt install openssl"
 command -v crontab >/dev/null || die "cron is missing: sudo apt install cron"
 command -v flock   >/dev/null || die "flock is missing: sudo apt install util-linux"
+command -v jq      >/dev/null || die "jq is missing: sudo apt install jq"
+command -v python3 >/dev/null || die "python3 is missing: sudo apt install python3"
 for f in docker-compose.yml deploy/server/docker-compose.override.yml deploy/server/env.local.example \
-         deploy/server/check-env.js deploy/server/proxy-link.sh deploy/kokli-db/docker-compose.yml deploy/kokli-db/init/01-grants.sql; do
+         deploy/server/check-env.js deploy/server/proxy-link.sh deploy/server/kokli-tls.sh \
+         deploy/kokli-db/docker-compose.yml deploy/kokli-db/init/01-grants.sql; do
   [ -f "$REPO/$f" ] || die "Run this from a copy of the repository: $f is missing."
 done
 
@@ -152,8 +155,9 @@ for pair in "docker-compose.yml:docker-compose.yml" "deploy/server/docker-compos
     say "installed ~/kokli/$to"
   fi
 done
-# Kokli's own, refreshed on every run: the cron line below runs it.
+# Kokli's own, refreshed on every run: the cron lines below run them.
 install -m 755 "$REPO/deploy/server/proxy-link.sh" "$APP_DIR/proxy-link.sh" || die "could not install ~/kokli/proxy-link.sh."
+install -m 755 "$REPO/deploy/server/kokli-tls.sh" "$APP_DIR/kokli-tls.sh" || die "could not install ~/kokli/kokli-tls.sh."
 
 # The database's own definition is changed only by a person, on purpose:
 # re-creating MySQL from a different definition — another server version, a
@@ -271,6 +275,9 @@ step "Scheduled jobs (crontab)"
 #                           only useful at roughly the right moment)
 #   every 5 minutes         the proxy's link to kokli-network, put back if an
 #                           upgrade of the proxy dropped it (only with a proxy)
+#   03:41 UTC = 09:11 IST   the *.kokli.in certificate, renewed when due and
+#                           handed to the proxy (kokli-tls.sh; until
+#                           DEPLOYMENT.md 7d made one, it does nothing)
 #
 # The backup and the restore test run in a one-off container of their own,
 # under the same lock a deploy takes (~/kokli/.kokli.lock): a deploy swapping
@@ -294,6 +301,7 @@ CRON_BLOCK="$(cat <<'CRON'
 30 21 * * 6  cd $HOME/kokli && date -u >> backup.log && flock --verbose -w 3600 .kokli.lock docker compose run --rm --no-deps -T --name kokli-verify-$$ kokli node scripts/backup.js --verify < /dev/null >> backup.log 2>&1
 0 21 * * *   docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/subscriptions',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'subscriptions',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
 */10 * * * * docker exec kokli node -e "fetch('http://127.0.0.1:3000/api/cron/whatsapp',{method:'POST',headers:{authorization:'Bearer '+process.env.CRON_SECRET}}).then(r=>{console.log(new Date().toISOString(),'whatsapp',r.status);process.exit(r.ok?0:1)},e=>{console.error(e.message);process.exit(1)})" >> $HOME/kokli/cron.log 2>&1
+41 3 * * *   /bin/bash $HOME/kokli/kokli-tls.sh renew >> $HOME/kokli/tls.log 2>&1
 PROXY_LINE
 # <<< kokli <<<
 CRON

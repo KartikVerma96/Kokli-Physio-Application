@@ -549,7 +549,7 @@ Actions → the run → *Re-run failed jobs* — then *Build Now* again in Jenki
 
 **First, Nginx Proxy Manager 2.16.0 or later** — done on 2026-10-25 (2.15.0 → 2.16.0,
 8 s down). Versions before 2.16.0 have CVE-2026-40519, an authenticated code execution
-through exactly the DNS-credentials field step 2 fills in. A later upgrade goes the same
+through the DNS-credentials field of NPM's certificate form. A later upgrade goes the same
 way — the proxy fronts the friend's sites too, so pick a quiet time with them — on the
 server:
 
@@ -566,47 +566,24 @@ gw-priority), port and volume of the old one, and puts the old one back by itsel
 the new one's backend does not answer within about three minutes. Its last lines
 compare every host with `before.txt`. A site that worked is broken:
 `… npm-upgrade.sh rollback` (with the same `NEW_IMAGE=`). Later,
-`… npm-upgrade.sh cleanup` removes the stopped old container and its image — for the
-2.16.0 upgrade, **before step 2**: once a Hostinger token is in, going back to an older
-version brings the CVE back, and those versions write every DNS token to disk at boot
-and leave it there.
+`… npm-upgrade.sh cleanup` removes the stopped old container and its image.
 
 Any other way of upgrading re-creates the container without its `kokli-network`
 link; the cron line from §7a puts it back within five minutes (or at once:
 `docker network connect --gw-priority -1 kokli-network nginx-proxy-manager`), and
 every deploy checks.
 
-**The proxy's certificates are the friend's too.** Step 2's DNS challenge makes Nginx
-Proxy Manager install the Hostinger plugin (and its own dependencies) into the one
-certbot that renews *every* certificate it holds, and every certbot run loads every
-plugin: one that fails to load stops every renewal. Before step 2, note what is there
-(done on 2026-10-25, on 2.16.0; again after any upgrade), and ask pip what step 2 will
-add, without adding it. The plugin takes any version of Hostinger's SDK, which is
-released almost daily, so ask on the day: every package on the `Would install` line
-must be missing from the freeze (2026-10-25: the plugin and eight new packages, none
-already there), and `No matching distribution` means step 2 would build one from
-source — stop there. After step 2, compare — only new lines (`>`) may appear, and
-certbot, acme, josepy, cryptography, pyOpenSSL, requests and urllib3 must keep their
-versions:
-
-```bash
-docker exec nginx-proxy-manager /opt/certbot/bin/pip freeze > ~/npm-certbot-before.txt
-docker exec nginx-proxy-manager /opt/certbot/bin/pip install --dry-run --no-cache-dir \
-  --only-binary :all: 'certbot-dns-hostinger~=0.1.3' | grep '^Would install'
-#   … step 2 …
-docker exec nginx-proxy-manager /opt/certbot/bin/pip freeze | diff ~/npm-certbot-before.txt -
-docker exec nginx-proxy-manager /opt/certbot/bin/pip check
-docker exec nginx-proxy-manager certbot --version   # an error: nothing renews. A DEBUG line from the plugin first is normal
-```
-
-Then prove one of the friend's certificates still renews, without renewing it: NPM's
-own renew command (`/app/internal/certificate.js`), plus `--dry-run` and the two flags
-Let's Encrypt's test server needs to open an account. Take one a working host uses —
+After every upgrade, prove the friend's certificates still renew, without renewing
+any: `pip check` and `certbot --version` in the proxy, then NPM's own renew command
+(`/app/internal/certificate.js`) with `--dry-run` and the two flags Let's Encrypt's
+test server needs to open an account, on a certificate a working host uses —
 `docker exec nginx-proxy-manager grep -h 'ssl_certificate ' /data/nginx/proxy_host/*.conf`
 names them (npm-9 to npm-12 on 2026-10-25; npm-1, npm-2, npm-7 and npm-8 fail every
 hour already, for names that no longer resolve):
 
 ```bash
+docker exec nginx-proxy-manager /opt/certbot/bin/pip check
+docker exec nginx-proxy-manager certbot --version
 docker exec nginx-proxy-manager certbot renew --dry-run --force-renewal \
   --config /etc/letsencrypt.ini --work-dir /tmp/letsencrypt-lib --logs-dir /data/logs \
   --cert-name npm-9 --preferred-challenges http --no-random-sleep-on-renew \
@@ -615,43 +592,66 @@ docker exec nginx-proxy-manager certbot renew --dry-run --force-renewal \
 ```
 
 Nothing is saved. "Another instance of Certbot is already running" is NPM's own run,
-hourly from the container's start: try again a minute later. Not the `*.kokli.in`
-certificate: 2.16 puts its token on disk only while NPM itself runs certbot, so a dry
-run of it from the shell fails on the missing credentials file.
+hourly from the container's start: try again a minute later.
 
-After every upgrade of the proxy, run `pip check`, `certbot --version` and the dry run
-again (not the diff: a new container starts from its image's own certbot). Once step 2
-is done, a new container's backend first pip-installs the Hostinger plugin from PyPI,
-and until that works there is no admin API and nothing renews; `npm-upgrade.sh` waits
-for `curl -s http://127.0.0.1:81/api/` to answer `{"status":"OK",…}`.
+**How Kokli goes in, and what it leaves alone.**
+[deploy/server/kokli-tls.sh](deploy/server/kokli-tls.sh) gives Kokli two proxy hosts
+and nothing else:
 
-**Before step 1, take the admin panel off the internet — the friend's call: it is
-their panel.** Port 81 answers on the public address (2026-10-25:
-`http://145.239.89.241:81/` gives the login page, over plain HTTP), and step 1's token,
-which can do anything in the Hostinger account, goes in behind it; 2.16.0 also ships a
-Node.js older than the 21 October 2026 security release (issue #5962). The fix:
-re-create the proxy with `-p 127.0.0.1:81:81`, and open the panel through an SSH
-tunnel — `ssh -L 8181:127.0.0.1:81 ubuntu@145.239.89.241`, then `http://localhost:8181`.
-A ufw rule does not do it: Docker's published ports go around ufw. `npm-upgrade.sh`
-re-creates the ports exactly as they are, so it needs a change before it can do this.
-
-**1. Hostinger API token** — hPanel → profile → API → new token, 1-year expiry, a
-calendar reminder a month before. Hostinger's API documentation says a token inherits
-every permission of the account that made it — there is no DNS-only scope — so it
-goes into Nginx Proxy Manager and nowhere else.
-
-**2. Two certificates** (Certificates → Add → *Let's Encrypt via HTTP* for Cert 1,
-*Let's Encrypt via DNS* for Cert 2). Two, because the
-Hostinger plugin deletes the other `_acme-challenge` record when it adds one, so a
-single certificate for both names fails every first attempt:
-
-| | Domain names | Challenge |
+| | Certificate | Renewed by |
 |---|---|---|
-| Cert 1 | `kokli.in` | HTTP (no token; the apex carries Google sign-in for every clinic, so it does not depend on Hostinger) |
-| Cert 2 | `*.kokli.in` | DNS → Hostinger.com → credentials `dns_hostinger_api_token = <token>` → propagation **120** seconds |
+| `kokli.in` | Let's Encrypt, HTTP-01, made by NPM | NPM, like every certificate it holds |
+| `*.kokli.in` | Let's Encrypt, DNS-01 through the Hostinger API, made by Kokli's own certbot (image `kokli-certbot`, state in `~/kokli/tls`), uploaded to NPM as a custom certificate | `kokli-tls.sh renew`, daily from cron |
 
-**3. Two proxy hosts**, identical apart from the domain and certificate — `kokli.in`
-with Cert 1, `*.kokli.in` with Cert 2:
+Two certificates, because the Hostinger plugin deletes every other `_acme-challenge`
+TXT record when it adds its own, so one certificate for both names fails; and the apex
+carries Google sign-in for every clinic, so it does not depend on Hostinger. The
+wildcard is not NPM's own DNS challenge because that would install the Hostinger
+plugin into the one certbot that renews the friend's certificates, keep the Hostinger
+token in their panel, and make every start of their NPM wait on PyPI.
+
+The script drives NPM through its API as an NPM user of Kokli's own, `npm@kokli.in`:
+not an admin, and seeing only its own items, so none of the friend's hosts or
+certificates even shows up for it, and NPM refuses it any change to them. Every command
+that changes NPM first records the friend's proxy-host files byte for byte and how
+each of their names answers, and afterwards proves both unchanged; it stops at the
+first difference. `… kokli-tls.sh remove` takes Kokli's hosts and certificates out of
+NPM again.
+
+**1. Two logins, saved on the server** — typed there, never pasted anywhere. The NPM
+admin login is used once, to make the Kokli user, and then deleted. The Hostinger
+token: hPanel → profile → API → new token, 1-year expiry, a calendar reminder a month
+before. A Hostinger token can do anything in the account that made it (there is no
+DNS-only scope), so it lives in this file alone, readable by this user alone:
+
+```bash
+mkdir -p -m 700 ~/kokli/secrets
+( umask 077
+  IFS= read -r -p 'NPM email: ' e; IFS= read -r -s -p 'NPM password: ' p; echo
+  printf '%s\n%s\n' "$e" "$p" > ~/kokli/secrets/npm-admin )
+( umask 077
+  IFS= read -r -s -p 'Hostinger API token: ' t; echo
+  printf 'dns_hostinger_api_token = %s\n' "$t" > ~/kokli/secrets/hostinger.ini )
+```
+
+**2. Run:**
+
+```bash
+bash ~/kokli-src/deploy/server/kokli-tls.sh user       # the NPM user "Kokli"; deletes the admin login
+bash ~/kokli-src/deploy/server/kokli-tls.sh apex       # kokli.in
+bash ~/kokli-src/deploy/server/kokli-tls.sh wildcard   # *.kokli.in (a dry run on the test server first), and its cron line
+bash ~/kokli-src/deploy/server/kokli-tls.sh verify
+```
+
+The wildcard's renewal: cron runs `~/kokli/kokli-tls.sh renew` at 03:41 UTC. certbot
+renews within 30 days of expiry; the script uploads the new certificate, saves Kokli's
+host so that NPM reloads nginx (gracefully), and checks the new one is what is served.
+Its log is `~/kokli/tls.log`; `WARNING: … expires within 20 days` there means renewals
+are failing. When the Hostinger token expires, make a new one and write it over
+`~/kokli/secrets/hostinger.ini` the same way.
+
+**3. What the two proxy hosts are set to** — the script sets exactly this, for
+`kokli.in` and `*.kokli.in` alike:
 
 | Setting | Value | Why |
 |---|---|---|
@@ -682,7 +682,7 @@ This server has an IPv6 address, and NPM listens on it. Do **not** add an AAAA r
 for kokli.in: through Docker, every IPv6 visitor arrives from one internal address,
 and would share one sign-in throttle.
 
-**4. Check:**
+**4. Check** — `kokli-tls.sh verify` does all of this:
 
 ```bash
 curl -s https://kokli.in/api/health                       # {"ok":true,"version":"<commit>"}
@@ -716,6 +716,16 @@ docker exec -i kokli-mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot 
 
 Let's Encrypt no longer emails before a certificate expires. Put `https://kokli.in`
 and one clinic subdomain on an uptime monitor with certificate-expiry alerts.
+
+**For the friend: their admin panel answers on the internet.** Port 81 is published on
+every address (2026-10-25: `http://145.239.89.241:81/` gives the login page, over plain
+HTTP). Whoever has the NPM admin password can change any host, Kokli's too, and 2.16.0
+ships a Node.js older than the 21 October 2026 security release (issue #5962). Their
+call, since it is their panel: re-create the proxy with `-p 127.0.0.1:81:81`, and open
+the panel through an SSH tunnel — `ssh -L 8181:127.0.0.1:81 ubuntu@145.239.89.241`,
+then `http://localhost:8181`. A ufw rule does not do it: Docker's published ports go
+around ufw. `npm-upgrade.sh` re-creates the ports exactly as they are, so it needs a
+change before it can do this.
 
 ### 7e. What a push does
 
@@ -896,8 +906,9 @@ Still to do:
 - [ ] Jenkins: `kokli-deploy-key` and `kokli-github-read`, `KOKLI_SITE_URL`, the Multibranch job
       with fork pull requests **off**, the webhook, one green build — then
       `KOKLI_DEPLOY_HOST`
-- [ ] Nginx Proxy Manager upgraded to ≥ 2.16.0, both certificates and proxy hosts in
-      place, the `X-Real-IP` check passed
+- [x] Nginx Proxy Manager upgraded to ≥ 2.16.0 (2026-10-25)
+- [ ] `kokli-tls.sh` `user`, `apex`, `wildcard` and `verify` done (§7d): both proxy hosts
+      answering, the `X-Real-IP` check passed, the renewal line in cron
 - [ ] Email for `support@kokli.in` and `hello@kokli.in` (MX records) — the site shows both
 - [ ] SMTP, with SPF, DKIM and DMARC on kokli.in — without it, password reset cannot work
 - [ ] Google OAuth: `https://kokli.in/api/auth/callback/google` registered, consent screen
