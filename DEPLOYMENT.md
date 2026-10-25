@@ -547,11 +547,27 @@ Actions → the run → *Re-run failed jobs* — then *Build Now* again in Jenki
 
 ### 7d. Nginx Proxy Manager, once
 
-Ask the friend to **upgrade Nginx Proxy Manager to 2.16.0 or later first**: 2.15.0
-(installed today) has CVE-2026-40519, an authenticated code execution through exactly
-the DNS-credentials field step 2 fills in. An upgrade re-creates the proxy's
-container, which drops its link to `kokli-network`; the cron line from §7a puts it
-back within five minutes (or at once:
+**First, Nginx Proxy Manager 2.16.0 or later**: 2.15.0 (installed today) has
+CVE-2026-40519, an authenticated code execution through exactly the DNS-credentials
+field step 2 fills in. The proxy fronts the friend's sites too, so pick a quiet time
+with them; then, on the server:
+
+```bash
+git -C ~/kokli-src pull --ff-only
+bash ~/kokli-src/deploy/server/npm-upgrade.sh check     # no downtime: every host's answers -> ~/npm-backup/before.txt
+bash ~/kokli-src/deploy/server/npm-upgrade.sh upgrade   # ~30 s down; carries on by itself if ssh drops
+```
+
+`upgrade` refuses unless `check` ran in the hour before. With the proxy stopped it
+backs up both volumes, re-creates the container with every network (each with its
+gw-priority), port and volume of the old one, and puts the old one back by itself if
+the new one does not come up. Its last lines compare every host with `before.txt`. A
+site that worked is broken: `bash ~/kokli-src/deploy/server/npm-upgrade.sh rollback`.
+A few days later, `… npm-upgrade.sh cleanup` removes the stopped old container and
+its image.
+
+Any other way of upgrading re-creates the container without its `kokli-network`
+link; the cron line from §7a puts it back within five minutes (or at once:
 `docker network connect --gw-priority -1 kokli-network nginx-proxy-manager`), and
 every deploy checks.
 
