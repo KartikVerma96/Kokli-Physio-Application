@@ -74,6 +74,7 @@ check_hosts() {
         "$(curl -s -k -L -m 15 $r "http://$h/.well-known/acme-challenge/npm-check" | grep -qx npm-ok && echo ok || echo FAIL)"
     done
   printf '%-34s %s\n' "admin UI (127.0.0.1:81)" "$(curl -s -o /dev/null -m 10 -w '%{http_code}' http://127.0.0.1:81/)"
+  printf '%-34s %s\n' "admin API (127.0.0.1:81/api/)" "$(curl -s -m 10 http://127.0.0.1:81/api/ | grep -o '"status":"[A-Za-z]*"' || echo none)"
   docker exec "$NAME" rm -f "$p/npm-check" 2>/dev/null || true
 }
 
@@ -177,18 +178,21 @@ cmd_upgrade() {
     exit 1
   fi
 
-  # Up means: nginx answers on the admin port, and its config tests clean.
+  # Up means: the backend answers on the admin port's API, and nginx's config
+  # tests clean. Not the admin page: nginx serves that by itself, backend or
+  # not, and without the backend nothing renews. About three minutes: with a
+  # DNS-challenge certificate, the backend first pip-installs its plugin.
   up=no
-  for i in $(seq 1 90); do
-    if [ "$(curl -s -o /dev/null -m 3 -w '%{http_code}' http://127.0.0.1:81/)" = 200 ] && docker exec "$NAME" nginx -t >/dev/null 2>&1; then up=yes; break; fi
+  for i in $(seq 1 180); do
+    if curl -s -m 3 http://127.0.0.1:81/api/ | grep -q '"status":"OK"' && docker exec "$NAME" nginx -t >/dev/null 2>&1; then up=yes; break; fi
     sleep 1
   done
   if [ "$up" != yes ]; then
-    say "ERROR: the new proxy did not come up within 90 s. Its log:"
+    say "ERROR: the new proxy's backend did not answer within about three minutes. Its log:"
     docker logs --tail 40 "$NAME" 2>&1 | grep -E -i 'emerg|error|fail' | tail -15
     say "putting the old one back"
     rm_new
-    docker rename "$OLD" "$NAME" && docker start "$NAME" >/dev/null && say "old proxy is running again (same data: this upgrade changes no database tables)" || say "ERROR: could not restart the old proxy - see 'bash $0 rollback'"
+    docker rename "$OLD" "$NAME" && docker start "$NAME" >/dev/null && say "old proxy is running again, on the data as the new one left it (if it misbehaves: bash $0 restore-data)" || say "ERROR: could not restart the old proxy - see 'bash $0 rollback'"
     exit 1
   fi
   say "== sites answering again after $(( $(date +%s) - t0 )) s"

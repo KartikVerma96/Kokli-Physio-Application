@@ -547,24 +547,29 @@ Actions → the run → *Re-run failed jobs* — then *Build Now* again in Jenki
 
 ### 7d. Nginx Proxy Manager, once
 
-**First, Nginx Proxy Manager 2.16.0 or later**: 2.15.0 (installed today) has
-CVE-2026-40519, an authenticated code execution through exactly the DNS-credentials
-field step 2 fills in. The proxy fronts the friend's sites too, so pick a quiet time
-with them; then, on the server:
+**First, Nginx Proxy Manager 2.16.0 or later** — done on 2026-10-25 (2.15.0 → 2.16.0,
+8 s down). Versions before 2.16.0 have CVE-2026-40519, an authenticated code execution
+through exactly the DNS-credentials field step 2 fills in. A later upgrade goes the same
+way — the proxy fronts the friend's sites too, so pick a quiet time with them — on the
+server:
 
 ```bash
 git -C ~/kokli-src pull --ff-only
+docker pull jc21/nginx-proxy-manager:<version>
 bash ~/kokli-src/deploy/server/npm-upgrade.sh check     # no downtime: every host's answers -> ~/npm-backup/before.txt
-bash ~/kokli-src/deploy/server/npm-upgrade.sh upgrade   # ~30 s down; carries on by itself if ssh drops
+NEW_IMAGE=jc21/nginx-proxy-manager:<version> bash ~/kokli-src/deploy/server/npm-upgrade.sh upgrade   # seconds down; carries on by itself if ssh drops
 ```
 
 `upgrade` refuses unless `check` ran in the hour before. With the proxy stopped it
 backs up both volumes, re-creates the container with every network (each with its
 gw-priority), port and volume of the old one, and puts the old one back by itself if
-the new one does not come up. Its last lines compare every host with `before.txt`. A
-site that worked is broken: `bash ~/kokli-src/deploy/server/npm-upgrade.sh rollback`.
-A few days later, `… npm-upgrade.sh cleanup` removes the stopped old container and
-its image.
+the new one's backend does not answer within about three minutes. Its last lines
+compare every host with `before.txt`. A site that worked is broken:
+`… npm-upgrade.sh rollback` (with the same `NEW_IMAGE=`). Later,
+`… npm-upgrade.sh cleanup` removes the stopped old container and its image — for the
+2.16.0 upgrade, **before step 2**: once a Hostinger token is in, going back to an older
+version brings the CVE back, and those versions write every DNS token to disk at boot
+and leave it there.
 
 Any other way of upgrading re-creates the container without its `kokli-network`
 link; the cron line from §7a puts it back within five minutes (or at once:
@@ -573,33 +578,70 @@ every deploy checks.
 
 **The proxy's certificates are the friend's too.** Step 2's DNS challenge makes Nginx
 Proxy Manager install the Hostinger plugin (and its own dependencies) into the one
-certbot that renews *every* certificate it holds. Before step 2, note what is there;
-after it, compare — only new lines (`>`) may appear, and certbot, acme, josepy,
-cryptography, pyOpenSSL, requests and urllib3 must keep their versions:
+certbot that renews *every* certificate it holds, and every certbot run loads every
+plugin: one that fails to load stops every renewal. Before step 2, note what is there
+(done on 2026-10-25, on 2.16.0; again after any upgrade), and ask pip what step 2 will
+add, without adding it. The plugin takes any version of Hostinger's SDK, which is
+released almost daily, so ask on the day: every package on the `Would install` line
+must be missing from the freeze (2026-10-25: the plugin and eight new packages, none
+already there), and `No matching distribution` means step 2 would build one from
+source — stop there. After step 2, compare — only new lines (`>`) may appear, and
+certbot, acme, josepy, cryptography, pyOpenSSL, requests and urllib3 must keep their
+versions:
 
 ```bash
 docker exec nginx-proxy-manager /opt/certbot/bin/pip freeze > ~/npm-certbot-before.txt
+docker exec nginx-proxy-manager /opt/certbot/bin/pip install --dry-run --no-cache-dir \
+  --only-binary :all: 'certbot-dns-hostinger~=0.1.3' | grep '^Would install'
 #   … step 2 …
 docker exec nginx-proxy-manager /opt/certbot/bin/pip freeze | diff ~/npm-certbot-before.txt -
 docker exec nginx-proxy-manager /opt/certbot/bin/pip check
-docker exec nginx-proxy-manager certbot --version
+docker exec nginx-proxy-manager certbot --version   # an error: nothing renews. A DEBUG line from the plugin first is normal
 ```
 
-Then prove one of the friend's certificates still renews, without renewing it
-(`certbot certificates` lists their names):
+Then prove one of the friend's certificates still renews, without renewing it: NPM's
+own renew command (`/app/internal/certificate.js`), plus `--dry-run` and the two flags
+Let's Encrypt's test server needs to open an account. Take one a working host uses —
+`docker exec nginx-proxy-manager grep -h 'ssl_certificate ' /data/nginx/proxy_host/*.conf`
+names them (npm-9 to npm-12 on 2026-10-25; npm-1, npm-2, npm-7 and npm-8 fail every
+hour already, for names that no longer resolve):
 
 ```bash
-docker exec nginx-proxy-manager certbot renew --dry-run --cert-name <one of the friend's>
+docker exec nginx-proxy-manager certbot renew --dry-run --force-renewal \
+  --config /etc/letsencrypt.ini --work-dir /tmp/letsencrypt-lib --logs-dir /data/logs \
+  --cert-name npm-9 --preferred-challenges http --no-random-sleep-on-renew \
+  --disable-hook-validation --agree-tos --register-unsafely-without-email
+#    → Congratulations, all simulated renewals succeeded   (2.16.0, 2026-10-25)
 ```
 
-Run the same checks after every upgrade of the proxy.
+Nothing is saved. "Another instance of Certbot is already running" is NPM's own run,
+hourly from the container's start: try again a minute later. Not the `*.kokli.in`
+certificate: 2.16 puts its token on disk only while NPM itself runs certbot, so a dry
+run of it from the shell fails on the missing credentials file.
+
+After every upgrade of the proxy, run `pip check`, `certbot --version` and the dry run
+again (not the diff: a new container starts from its image's own certbot). Once step 2
+is done, a new container's backend first pip-installs the Hostinger plugin from PyPI,
+and until that works there is no admin API and nothing renews; `npm-upgrade.sh` waits
+for `curl -s http://127.0.0.1:81/api/` to answer `{"status":"OK",…}`.
+
+**Before step 1, take the admin panel off the internet — the friend's call: it is
+their panel.** Port 81 answers on the public address (2026-10-25:
+`http://145.239.89.241:81/` gives the login page, over plain HTTP), and step 1's token,
+which can do anything in the Hostinger account, goes in behind it; 2.16.0 also ships a
+Node.js older than the 21 October 2026 security release (issue #5962). The fix:
+re-create the proxy with `-p 127.0.0.1:81:81`, and open the panel through an SSH
+tunnel — `ssh -L 8181:127.0.0.1:81 ubuntu@145.239.89.241`, then `http://localhost:8181`.
+A ufw rule does not do it: Docker's published ports go around ufw. `npm-upgrade.sh`
+re-creates the ports exactly as they are, so it needs a change before it can do this.
 
 **1. Hostinger API token** — hPanel → profile → API → new token, 1-year expiry, a
 calendar reminder a month before. Hostinger's API documentation says a token inherits
 every permission of the account that made it — there is no DNS-only scope — so it
 goes into Nginx Proxy Manager and nowhere else.
 
-**2. Two certificates** (SSL Certificates → Add → Let's Encrypt). Two, because the
+**2. Two certificates** (Certificates → Add → *Let's Encrypt via HTTP* for Cert 1,
+*Let's Encrypt via DNS* for Cert 2). Two, because the
 Hostinger plugin deletes the other `_acme-challenge` record when it adds one, so a
 single certificate for both names fails every first attempt:
 
@@ -618,7 +660,8 @@ with Cert 1, `*.kokli.in` with Cert 2:
 | **Cache Assets** | **OFF** | it caches responses with their `Set-Cookie` — one user's session handed to the next |
 | Block Common Exploits | OFF | it blocks nothing this app is exposed to, and 403s clinical words like "erectile" in a search |
 | Force SSL / HTTP/2 | ON / ON | the session cookie is `Secure` |
-| HSTS | **OFF** for now | on this NPM the HSTS header is shared between every site (issue #5947) and always includes `preload`. Revisit after the first automatic renewal |
+| HSTS | **OFF** for now | on this NPM (2.16.0 too) a host only chooses whether HSTS is sent: the value is one `map` shared by every host, so the host file nginx reads last decides `includeSubDomains`, and it always includes `preload` (issue #5947, still open). Revisit once #5947 is fixed and an automatic renewal has gone through |
+| Trust Upstream Forwarded Proto Headers | **OFF** (the default) | nothing sits in front of NPM; on, any client skips Force SSL by sending `X-Forwarded-Proto: https` |
 | Advanced | the two lines below | |
 
 ```nginx
@@ -648,13 +691,17 @@ echo | openssl s_client -connect 145.239.89.241:443 -servername x.kokli.in 2>/de
   | openssl x509 -noout -subject -enddate                 # *.kokli.in, ~90 days out
 ```
 
-And that an invented `X-Real-IP` gets nowhere. On the server, find the proxy host's
-number in NPM (the `kokli.in` host's edit URL ends in it), then:
+And that an invented `X-Real-IP` gets nowhere. On the server, by 127.0.0.1: that way
+the request arrives from Docker's gateway, an address NPM trusts out of the box, so
+without the Advanced line the log would show 9.9.9.9 (by the public address it arrives
+as 145.239.89.241, which NPM never trusts, and passes either way). The host's number is
+in its config file's name — 2.16 edits a host in a dialog, so no URL shows it:
 
 ```bash
-curl -s -o /dev/null -H 'X-Real-IP: 9.9.9.9' https://kokli.in/api/health
+docker exec nginx-proxy-manager grep -l 'server_name kokli.in;' /data/nginx/proxy_host/*.conf   # -> …/<number>.conf
+curl -s -o /dev/null --resolve kokli.in:443:127.0.0.1 -H 'X-Real-IP: 9.9.9.9' https://kokli.in/api/health
 docker exec nginx-proxy-manager tail -1 /data/logs/proxy-host-<number>_access.log
-#    → [Client <one of this server's own addresses, or Docker's 172.x>] — not 9.9.9.9
+#    → [Client 172.x.0.1] (Docker's gateway) — not 9.9.9.9
 ```
 
 **5. Sign in.** At `https://kokli.in/login`, as `owner@kokli.in` with the password in
