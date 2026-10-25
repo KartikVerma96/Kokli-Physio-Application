@@ -44,12 +44,18 @@ function withRealAddress(request) {
   const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
   if (!host) return request
 
-  const name = host.split(':')[0]
+  const [name, port = ''] = host.split(':')
   if (name !== platform.domain && !name.endsWith(`.${platform.domain}`)) return request
 
+  // Hostname and port separately. Given a host without a port, a URL keeps the
+  // port it had — and request.url carries the app's own, :3000. Behind the proxy
+  // the Host header has no port, so every link Auth.js made (sign-out's redirect
+  // among them) pointed at https://kokli.in:3000, which nothing answers. An empty
+  // port is the protocol's default.
   const url = new URL(request.url)
   url.protocol = `${platform.protocol}:`
-  url.host = host
+  url.hostname = name
+  url.port = port
   return new NextRequest(url, request)
 }
 
