@@ -643,12 +643,22 @@ bash ~/kokli-src/deploy/server/kokli-tls.sh wildcard   # *.kokli.in (a dry run o
 bash ~/kokli-src/deploy/server/kokli-tls.sh verify
 ```
 
-The wildcard's renewal: cron runs `~/kokli/kokli-tls.sh renew` at 03:41 UTC. certbot
-renews within 30 days of expiry; the script uploads the new certificate, saves Kokli's
-host so that NPM reloads nginx (gracefully), and checks the new one is what is served.
-Its log is `~/kokli/tls.log`; `WARNING: … expires within 20 days` there means renewals
-are failing. When the Hostinger token expires, make a new one and write it over
-`~/kokli/secrets/hostinger.ini` the same way.
+Renewal: cron runs `~/kokli/kokli-tls.sh renew` at 03:41 UTC (every command refreshes
+that copy). certbot renews the wildcard when about a third of its life is left; the
+script uploads it, saves Kokli's host so that NPM reloads nginx (gracefully), and
+checks the new one is what is served. NPM renews `kokli.in` itself but does not
+reload nginx afterwards, so the same run re-saves that host when the file NPM holds is
+newer than what is served. Its log is `~/kokli/tls.log`; a `WARNING` or `ERROR` there
+means a certificate has under a quarter of its life left, or NPM no longer has Kokli's.
+When the Hostinger token expires, make a new one, write it over
+`~/kokli/secrets/hostinger.ini` the same way, then `bash ~/kokli/kokli-tls.sh renew`.
+
+The friend should know two things. Deleting Kokli's certificates in their panel breaks
+`nginx -t` for every site (Kokli's hosts still point at them): to take Kokli out, run
+`… kokli-tls.sh remove`. And NPM writes an uploaded certificate's private key into its
+own logs (`/data/logs/backend.log`, `docker logs`), so those must not be posted
+anywhere; if they were, `KOKLI_FORCE_RENEW=1 bash ~/kokli/kokli-tls.sh renew` replaces
+the key at once.
 
 **3. What the two proxy hosts are set to** — the script sets exactly this, for
 `kokli.in` and `*.kokli.in` alike:
