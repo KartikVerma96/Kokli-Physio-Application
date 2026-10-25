@@ -320,7 +320,7 @@ DOCKERFILE
 certbot() {
   local rc
   mkdir -p "$TLS/conf" "$TLS/work" "$TLS/logs"
-  timeout -k 60 1800 docker run --rm --name "kokli-certbot-$$" --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  timeout --foreground -k 60 1800 docker run --rm --name "kokli-certbot-$$" --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -v "$TLS:/tls" -v "$SEC/hostinger.ini:/run/hostinger.ini:ro" \
     "$CERTBOT_IMAGE" --config-dir /tls/conf --work-dir /tls/work --logs-dir /tls/logs "$@"
   rc=$?
@@ -445,6 +445,7 @@ cmd_renew() {
   else
     say "   no $WILD certificate here: nothing to renew"
   fi
+  [ -s "$SEC/npm-kokli" ] || { say "   no Kokli NPM login yet (DEPLOYMENT.md 7d): nothing to check in NPM"; return $rc; }
   kokli_login
   # *.kokli.in: NPM must serve what certbot holds.
   c="$(cert_id other "$WILD")" || exit 1
@@ -480,6 +481,8 @@ cmd_renew() {
     fi
     say "   $DOMAIN: $(openssl x509 -noout -enddate -in "$WORK/apex.pem")"
     soon "$WORK/apex.pem" && { say "WARNING: $DOMAIN (renewed by NPM) is served with under a quarter of its life left - NPM's renewal is failing"; rc=1; }
+  elif [ -n "$c" ]; then
+    say "WARNING: $DOMAIN does not answer over HTTPS here (is its proxy host switched off in NPM?)"; rc=1
   fi
   return $rc
 }
@@ -491,10 +494,10 @@ cmd_verify() {
   check_kokli "$DOMAIN" || ok=no
   check_kokli "renew-check.$DOMAIN" || ok=no
   check_real_ip || ok=no
-  if crontab -l 2>/dev/null | grep -qF 'kokli-tls.sh renew' && cmp -s "$SELF" "$K/kokli-tls.sh"; then
-    say "   daily renewal: in cron, and cron runs this version"
+  if crontab -l 2>/dev/null | grep -qF 'kokli-tls.sh renew'; then
+    say "   daily renewal: in cron"
   else
-    say "   daily renewal: NOT scheduled, or cron runs another version (bash $SELF wildcard schedules it)"; ok=no
+    say "   daily renewal: NOT scheduled (bash $SELF wildcard schedules it)"; ok=no
   fi
   for h in "$DOMAIN" "renew-check.$DOMAIN"; do
     served_pem "$h" "$WORK/v.pem" && soon "$WORK/v.pem" && { say "   WARNING: the certificate for $h has under a quarter of its life left"; ok=no; }
