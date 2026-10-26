@@ -26,7 +26,7 @@ export default async function TeamPage() {
   const clinic = await requireCurrentClinic()
   const session = await auth()
 
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   const physios = await query(
     `SELECT u.id, u.name, u.email, u.is_active, u.created_at,

@@ -62,7 +62,7 @@ export default async function DataPage() {
    * owns the business and carries the legal responsibility for them.
    */
   const session = await auth()
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   /**
    * One query for all seven counts rather than seven queries.

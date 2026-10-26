@@ -38,7 +38,6 @@ async function requireClinicAdmin() {
   const user = session?.user
   if (!user) throw new Error('UNAUTHENTICATED')
 
-  if (user.role === 'platform') return { clinic, user }
   if (user.role !== 'admin') throw new Error('FORBIDDEN')
   if (Number(user.clinicId) !== Number(clinic.id)) throw new Error('FORBIDDEN')
 

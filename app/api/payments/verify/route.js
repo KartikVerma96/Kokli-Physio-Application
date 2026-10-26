@@ -50,7 +50,7 @@ export async function POST(request) {
   if (!session?.user) {
     return NextResponse.json({ error: 'Please sign in.' }, { status: 401 })
   }
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     return NextResponse.json({ error: 'Not allowed.' }, { status: 403 })
   }
 

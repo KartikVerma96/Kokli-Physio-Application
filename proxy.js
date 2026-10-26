@@ -105,23 +105,22 @@ export default auth((request) => {
   /**
    * `user` from here on means "signed in AND entitled to be on this hostname".
    *
-   * Platform staff pass everywhere — supporting a customer means being able to
-   * open their clinic. Everyone else must match the subdomain exactly.
+   * On a clinic's subdomain that is that clinic's own people and nobody else —
+   * not another clinic's, and not the platform account either: it belongs to
+   * the root domain alone, and is no key to any clinic's patients.
    */
   let user = null
   if (sessionUser) {
-    if (sessionUser.role === 'platform') {
+    if (isPlatformHost) {
+      // The platform account — or a clinic's user on the root domain, signed in
+      // but with no clinic context here: fine for signup/marketing, and the
+      // world checks below move them along if they reach for a clinic page.
       user = sessionUser
-    } else if (isPlatformHost) {
-      // A clinic's user on the root domain. They are signed in, but there is no
-      // clinic context here — fine for signup/marketing, and the world checks
-      // below will move them along if they try to reach a clinic page.
-      user = sessionUser
-    } else if (sessionUser.clinicSlug === slug) {
+    } else if (sessionUser.role !== 'platform' && sessionUser.clinicSlug === slug) {
       user = sessionUser
     }
-    // else: a session for a DIFFERENT clinic. Deliberately left as null, so this
-    // request is treated exactly as if nobody were signed in.
+    // else: another clinic's session, or the platform's. Deliberately left as
+    // null, so this request is treated exactly as if nobody were signed in.
   }
 
   /**
@@ -174,6 +173,22 @@ export default auth((request) => {
       }
     }
 
+    // A sign-in that starts here starts on the root domain: forget any clinic
+    // remembered from a clinic page visited a few minutes ago, so that Google
+    // sign-in (lib/auth.js) does not judge this one against that clinic.
+    if (matches(['/login'])) {
+      const response = proceed()
+      response.cookies.set('pending-clinic', '', {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: request.nextUrl.protocol === 'https:',
+        path: '/',
+        maxAge: 0,
+        ...(cookieParentDomain() ? { domain: cookieParentDomain() } : {}),
+      })
+      return response
+    }
+
     return proceed()
   }
 
@@ -196,7 +211,7 @@ export default auth((request) => {
   }
 
   // ----------------------------------------------------------- 3. staff only
-  if (user && matches(CLINIC_STAFF) && !['admin', 'physio', 'platform'].includes(user.role)) {
+  if (user && matches(CLINIC_STAFF) && !['admin', 'physio'].includes(user.role)) {
     // Send them to their own dashboard rather than a "403 Forbidden" page.
     // There is no reason to confirm to a patient that an admin area exists.
     return NextResponse.redirect(new URL('/dashboard', request.nextUrl))

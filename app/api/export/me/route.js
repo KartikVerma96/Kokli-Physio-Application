@@ -72,7 +72,7 @@ export async function GET() {
    * never be the only thing standing between two tenants.
    */
   const userId = Number(session.user.id)
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     return Response.json({ error: 'Not your clinic.' }, { status: 403 })
   }
 

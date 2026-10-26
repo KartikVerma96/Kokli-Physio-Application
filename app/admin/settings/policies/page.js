@@ -24,7 +24,7 @@ export default async function PoliciesPage() {
   const clinic = await requireCurrentClinic()
   const session = await auth()
 
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   return (
     <div className="max-w-3xl space-y-6">

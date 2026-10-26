@@ -73,12 +73,12 @@ export default async function AdminLayout({ children }) {
   // proxy.js already handles this. Repeated here because an authorisation check
   // you only do in one place is an authorisation check waiting to be bypassed.
   if (!session?.user) redirect('/login?next=/admin')
-  if (!['admin', 'physio', 'platform'].includes(session.user.role)) redirect('/dashboard')
+  if (!['admin', 'physio'].includes(session.user.role)) redirect('/dashboard')
 
   // Staff of a DIFFERENT clinic must never reach this one's admin, even though
   // their session cookie is visible here. proxy.js checks it too; this is the
   // second line of defence on the most sensitive area of the app.
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     redirect('/login?next=/admin')
   }
 

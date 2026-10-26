@@ -36,7 +36,7 @@ export default async function OnboardingPage({ searchParams }) {
 
   // Only the clinic's own administrator sets it up. The admin layout has already
   // checked the session belongs here; this narrows it to the right role.
-  if (session?.user?.role !== 'admin' && session?.user?.role !== 'platform') {
+  if (session?.user?.role !== 'admin') {
     redirect('/admin')
   }
 

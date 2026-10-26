@@ -78,7 +78,7 @@ export default async function DashboardLayout({ children }) {
    * the patient portal — every page inside it renders medical records. A single
    * check in one place is not enough for that, so the layout verifies it too.
    */
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     redirect('/login?next=/dashboard')
   }
 

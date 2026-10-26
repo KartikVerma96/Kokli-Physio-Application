@@ -43,7 +43,7 @@ export default async function BillingPage() {
   // Money is the owner's business. A physiotherapist has no reason to see the
   // clinic's invoices, and Admin → Billing is not in their sidebar anyway — this
   // is the check that makes that real rather than cosmetic.
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   const [plans, subscription, invoices] = await Promise.all([
     getPublicPlans(),

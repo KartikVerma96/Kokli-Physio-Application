@@ -34,7 +34,7 @@ export default async function PaymentSettingsPage() {
 
   // Payment credentials move money. Only the clinic's administrator may see or
   // change them — not the physiotherapist, who has no reason to.
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   const connected = Boolean(clinic.razorpay_key_id)
   const isTestMode = clinic.razorpay_key_id?.startsWith('rzp_test_')

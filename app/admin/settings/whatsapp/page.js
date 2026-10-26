@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic'
 export default async function WhatsAppPage() {
   const clinic = await requireCurrentClinic()
   const session = await auth()
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   const allowance = await whatsappAllowance(clinic)
   const own = usesOwnNumber(clinic)

@@ -63,7 +63,7 @@ export async function POST(request) {
 
   // A patient of another clinic holds a valid session here, because the cookie
   // spans subdomains. They may not book on this one.
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     return NextResponse.json(
       { error: 'Please sign in with an account for this clinic.' },
       { status: 403 }

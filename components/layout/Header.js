@@ -42,7 +42,7 @@ export default async function Header({ site }) {
   const sessionUser = session?.user ?? null
   const user =
     sessionUser &&
-    (sessionUser.role === 'platform' || Number(sessionUser.clinicId) === Number(site.id))
+    Number(sessionUser.clinicId) === Number(site.id)
       ? sessionUser
       : null
 

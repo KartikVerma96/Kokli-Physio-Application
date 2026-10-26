@@ -318,6 +318,80 @@ console.log('\nTHE PLATFORM')
     `got ${onClinic.status}`)
 }
 
+console.log('\nWHO MAY SIGN IN WHERE')
+{
+  // The platform account belongs to the root domain alone.
+  const s1 = makeSession()
+  const ownerOnClinic = await signIn(s1, A.origin, 'owner@kokli.in', 'owner123')
+  check(ownerOnClinic === null, "the platform account cannot sign in on a clinic's login page",
+    `got role=${ownerOnClinic?.role}`)
+
+  // A clinic's people sign in on their own clinic's site, not on another's.
+  const s2 = makeSession()
+  const adminElsewhere = await signIn(s2, B.origin, 'admin@aarogyaphysio.in', 'admin123')
+  check(adminElsewhere === null, "clinic A's admin cannot sign in on clinic B's login page",
+    `got slug=${adminElsewhere?.clinicSlug}`)
+  const s3 = makeSession()
+  const patientElsewhere = await signIn(s3, B.origin, 'patient@example.com', 'patient123')
+  check(patientElsewhere === null, "clinic A's patient cannot sign in on clinic B's login page",
+    `got slug=${patientElsewhere?.clinicSlug}`)
+  const s4 = makeSession()
+  const adminHome = await signIn(s4, B.origin, 'b.admin@example.com', 'bpatient123')
+  check(adminHome?.clinicSlug === B.slug, "clinic B's admin signs in on clinic B",
+    `got slug=${adminHome?.clinicSlug}`)
+
+  // On the root domain a clinic's people still may: the login page sends them on.
+  const s5 = makeSession()
+  const viaRoot = await signIn(s5, PLATFORM, 'admin@aarogyaphysio.in', 'admin123')
+  check(viaRoot?.clinicSlug === A.slug, "clinic A's admin may sign in on the root domain",
+    `got slug=${viaRoot?.clinicSlug}`)
+  // A redirect() during render is a 307 — or, once streaming has begun, a 200
+  // whose page carries the redirect. Either must point at their own clinic.
+  const onward = await s5.req(PLATFORM, '/login')
+  const to = onward.headers.get('location') || (onward.status === 200 ? await onward.text() : '')
+  check(to.includes(`${A.slug}.`) && to.includes('/admin'),
+    "and the root login page sends them to their own clinic's admin", `got ${onward.status}`)
+}
+
+console.log('\nTHE PLATFORM ACCOUNT ON A CLINIC SITE')
+{
+  const s = makeSession()
+  const owner = await signIn(s, PLATFORM, 'owner@kokli.in', 'owner123')
+  check(owner?.role === 'platform', 'signed in as the platform owner on the root domain', `role=${owner?.role}`)
+
+  // Its session cookie reaches every clinic's address — and opens nothing there.
+  for (const [path, label] of [
+    ['/admin', "the platform account cannot open a clinic's admin"],
+    ['/admin/patients', "cannot list a clinic's patients"],
+    [`/admin/appointments/${ids.appointmentB}`, "cannot open a clinic's appointment record"],
+    ['/admin/settings/team', "cannot open a clinic's team settings"],
+    ['/dashboard', "cannot open a clinic's patient portal"],
+  ]) {
+    const res = await s.req(B.origin, path)
+    const where = res.headers.get('location') || ''
+    check(res.status === 307 && where.includes('/login'), label, `got ${res.status} → ${where || '-'}`)
+  }
+
+  const booking = await s.req(B.origin, '/api/appointments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      serviceId: ids.serviceB, date: '2099-01-05', startTime: '11:00', mode: 'clinic',
+    }),
+  })
+  check([401, 403].includes(booking.status), 'cannot book in a clinic', `got ${booking.status}`)
+
+  const exported = await s.req(B.origin, '/api/export/me')
+  check([401, 403].includes(exported.status), "cannot export from a clinic", `got ${exported.status}`)
+
+  const page = await (await s.req(B.origin, '/')).text()
+  check(!owner?.name || !page.includes(owner.name),
+    "a clinic's public page does not show the platform account as signed in")
+
+  const console_ = await s.req(PLATFORM, '/platform')
+  check(console_.status === 200, 'and the platform console still opens for it', `got ${console_.status}`)
+}
+
 console.log('\nCleaning up…')
 await teardown()
 console.log('  ✓ test clinic removed')

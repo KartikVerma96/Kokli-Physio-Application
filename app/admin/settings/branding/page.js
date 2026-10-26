@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 export default async function BrandingPage() {
   const clinic = await requireCurrentClinic()
   const session = await auth()
-  if (!['admin', 'platform'].includes(session?.user?.role)) redirect('/admin')
+  if (session?.user?.role !== 'admin') redirect('/admin')
 
   return (
     <div className="max-w-3xl space-y-6">

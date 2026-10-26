@@ -57,7 +57,7 @@ export default async function ConsultPage({ params }) {
   if (!session?.user) redirect(`/login?next=/consult/${id}`)
 
   // A session from another clinic is visible here but must not open a video room.
-  if (session.user.role !== 'platform' && Number(session.user.clinicId) !== Number(clinic.id)) {
+  if (Number(session.user.clinicId) !== Number(clinic.id)) {
     redirect(`/login?next=/consult/${id}`)
   }
 
